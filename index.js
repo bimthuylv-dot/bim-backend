@@ -115,3 +115,9 @@ cron.schedule('0 8 * * *', async () => {
           to: assigneeEmail,
           subject: `[CẢNH BÁO TRỄ HẠN] Công việc: ${title}`,
           html: `
+            <h3>Cảnh báo công việc quá hạn!</h3>
+            <p>Chào <b>${assignee}</b>,</p>
+            <p>Nhiệm vụ <b>${title}</b> của bạn đã quá hạn từ ngày <b>${dueDate}</b>.</p>
+            <p>Vui lòng cập nhật trạng thái trên Google Sheet hoặc Web Portal ngay.</p>
+          `
+        });
