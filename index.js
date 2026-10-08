@@ -11,19 +11,30 @@ app.use(express.json());
 const SPREADSHEET_ID = '1I279Ll2_sC12dx-LAAL4evlGZ_QGtJGxJmarxl52ToA';
 const ADMIN_EMAIL = 'bimthuylv@gmail.com';
 
-// Cấu hình Google Sheets Auth với Service Account (Set qua biến môi trường Cloud)
-const auth = new google.auth.GoogleAuth({
-  credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '{}'),
-  scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-});
+// Khởi tạo Google Sheets Auth
+let auth;
+try {
+  const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '{}');
+  auth = new google.auth.GoogleAuth({
+    credentials,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  });
+} catch (e) {
+  console.error("Lỗi parse GOOGLE_SERVICE_ACCOUNT_JSON:", e.message);
+}
 
-// Cấu hình Email Transporter (Google App Password)
+// Khởi tạo Email Transporter
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: process.env.SYSTEM_EMAIL || ADMIN_EMAIL,
     pass: process.env.GMAIL_APP_PASSWORD,
   },
+});
+
+// Trang chủ kiểm tra Server
+app.get('/', (req, res) => {
+  res.send('BIM Task Management Backend API is running!');
 });
 
 // 1. API Lấy danh sách nhiệm vụ từ Google Sheet
@@ -41,7 +52,6 @@ app.get('/api/tasks', async (req, res) => {
     const tasks = rows.map((row) => {
       let status = row[8] || 'Pending';
       const dueDate = row[7] || '';
-      // Tự động chuyển trạng thái nếu trễ hạn
       if (status !== 'Completed' && dueDate && dueDate < today) {
         status = 'Overdue';
       }
@@ -90,7 +100,7 @@ app.post('/api/tasks', async (req, res) => {
   }
 });
 
-// 3. CRONJOB: Tự động quét & gửi mail cảnh báo trễ hạn lúc 8h sáng hàng ngày
+// 3. CRONJOB: Cảnh báo trễ hạn lúc 8h sáng hàng ngày
 cron.schedule('0 8 * * *', async () => {
   try {
     const sheets = google.sheets({ version: 'v4', auth });
@@ -113,11 +123,15 @@ cron.schedule('0 8 * * *', async () => {
         await transporter.sendMail({
           from: `"BIM Task System" <${ADMIN_EMAIL}>`,
           to: assigneeEmail,
-          subject: `[CẢNH BÁO TRỄ HẠN] Công việc: ${title}`,
-          html: `
-            <h3>Cảnh báo công việc quá hạn!</h3>
-            <p>Chào <b>${assignee}</b>,</p>
-            <p>Nhiệm vụ <b>${title}</b> của bạn đã quá hạn từ ngày <b>${dueDate}</b>.</p>
-            <p>Vui lòng cập nhật trạng thái trên Google Sheet hoặc Web Portal ngay.</p>
-          `
+          subject: `[CANH BAO TRE HAN] Cong viec: ${title}`,
+          html: `<h3>Canh bao cong viec qua han!</h3><p>Chao <b>${assignee}</b>,</p><p>Nhiem vu <b>${title}</b> qua han tu <b>${dueDate}</b>.</p>`,
         });
+      }
+    }
+  } catch (err) {
+    console.error('Lỗi Cronjob:', err);
+  }
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
