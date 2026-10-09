@@ -11,13 +11,13 @@ const JWT_SECRET = process.env.JWT_SECRET || 'BIM_PPM_ENTERPRISE_SECRET_KEY_2026
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/bim_ppm';
 
 // -------------------------------------------------------------------
-// 1. KẾT NỐI MONGODB & KHỞI TẠO TÀI KHOẢN MẶC ĐỊNH
+// 1. KẾT NỐI MONGODB ATLAS & KHỞI TẠO TÀI KHOẢN MẶC ĐỊNH
 // -------------------------------------------------------------------
 mongoose.connect(MONGODB_URI)
   .then(async () => {
     console.log('✅ Đã kết nối MongoDB Atlas thành công!');
     
-    // Tự động khởi tạo tài khoản Admin mặc định
+    // Tự động khởi tạo Admin
     const adminExists = await User.findOne({ email: 'bimthuylv@gmail.com' });
     if (!adminExists) {
       await User.create({
@@ -30,7 +30,7 @@ mongoose.connect(MONGODB_URI)
       console.log('🎉 Khởi tạo Admin: bimthuylv@gmail.com / 123456');
     }
 
-    // Tự động khởi tạo 1 Manager và 1 Member mẫu để test ngay
+    // Tự động khởi tạo Manager mẫu
     const managerExists = await User.findOne({ email: 'manager@bim.com' });
     if (!managerExists) {
       await User.create({
@@ -43,6 +43,7 @@ mongoose.connect(MONGODB_URI)
       console.log('🎉 Khởi tạo Manager mẫu: manager@bim.com / 123456');
     }
 
+    // Tự động khởi tạo Member mẫu
     const memberExists = await User.findOne({ email: 'member@bim.com' });
     if (!memberExists) {
       await User.create({
@@ -58,7 +59,7 @@ mongoose.connect(MONGODB_URI)
   .catch(err => console.error('❌ Lỗi kết nối MongoDB:', err));
 
 // -------------------------------------------------------------------
-// 2. DATABASE SCHEMAS & MODELS
+// 2. SCHEMAS & MODELS
 // -------------------------------------------------------------------
 
 const userSchema = new mongoose.Schema({
@@ -73,7 +74,7 @@ const User = mongoose.model('User', userSchema);
 const projectSchema = new mongoose.Schema({
   name: { type: String, required: true },
   code: { type: String, required: true, unique: true },
-  managerEmail: { type: String, required: true }, // Email của Manager phụ trách
+  managerEmail: { type: String, required: true },
   createdAt: { type: Date, default: Date.now }
 });
 const Project = mongoose.model('Project', projectSchema);
@@ -88,7 +89,7 @@ const taskSchema = new mongoose.Schema({
   projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
   folderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Folder', default: null },
   title: { type: String, required: true },
-  assigneeEmail: { type: String, required: true }, // Member làm chính
+  assigneeEmail: { type: String, required: true },
   status: { 
     type: String, 
     enum: ['To Do', 'In Progress', 'Submitted', 'L1 Approved', 'Completed', 'Rejected'], 
@@ -111,10 +112,9 @@ const reportDataSchema = new mongoose.Schema({
 const ReportData = mongoose.model('ReportData', reportDataSchema);
 
 // -------------------------------------------------------------------
-// 3. MIDDLEWARE XÁC THỰC JWT & PHÂN QUYỀN
+// 3. MIDDLEWARE PHÂN QUYỀN JWT
 // -------------------------------------------------------------------
 
-// Middleware kiểm tra JWT Token
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -130,7 +130,6 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Middleware kiểm tra Role
 const requireRole = (allowedRoles) => {
   return (req, res, next) => {
     if (!req.user || !allowedRoles.includes(req.user.role)) {
@@ -148,10 +147,10 @@ const requireRole = (allowedRoles) => {
 // -------------------------------------------------------------------
 
 app.get('/', (req, res) => {
-  res.send('🚀 BIM Enterprise PPM API Server (RBAC & JWT) is running live!');
+  res.send('🚀 BIM Enterprise PPM API Server is running live!');
 });
 
-// Auth: Đăng nhập cấp JWT Token
+// Auth
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -160,7 +159,6 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Email hoặc mật khẩu không chính xác!' });
     }
 
-    // Tạo JWT Token có thời hạn 24 giờ
     const token = jwt.sign(
       { id: user._id, email: user.email, role: user.role, fullName: user.fullName },
       JWT_SECRET,
@@ -183,7 +181,6 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Đổi mật khẩu cá nhân (Mọi người dùng đã đăng nhập)
 app.put('/api/change-password', authenticateToken, async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
@@ -201,14 +198,12 @@ app.put('/api/change-password', authenticateToken, async (req, res) => {
   }
 });
 
-// USERS MANAGEMENT
-// Lấy danh sách user (Đã đăng nhập)
+// Users
 app.get('/api/users', authenticateToken, async (req, res) => {
   const users = await User.find({}, '-password');
   res.json(users);
 });
 
-// CHỈ ADMIN MỚI ĐƯỢC TẠO USER MỚI
 app.post('/api/users', authenticateToken, requireRole(['Admin']), async (req, res) => {
   try {
     const user = await User.create(req.body);
@@ -218,11 +213,9 @@ app.post('/api/users', authenticateToken, requireRole(['Admin']), async (req, re
   }
 });
 
-// PROJECTS MANAGEMENT
-// Lấy danh sách dự án (Phân luồng theo Role)
+// Projects
 app.get('/api/projects', authenticateToken, async (req, res) => {
   let query = {};
-  // Nếu là Manager, chỉ thấy các Dự án do mình quản lý
   if (req.user.role === 'Manager') {
     query.managerEmail = req.user.email;
   }
@@ -230,25 +223,32 @@ app.get('/api/projects', authenticateToken, async (req, res) => {
   res.json(projects);
 });
 
-// CHỈ ADMIN MỚI ĐƯỢC KHOAN BÁO DỰ ÁN & GÁN MANAGER
 app.post('/api/projects', authenticateToken, requireRole(['Admin']), async (req, res) => {
   try {
     const { name, code, managerEmail } = req.body;
-    
-    // Kiểm tra xem ManagerEmail có hợp lệ không
-    const managerUser = await User.findOne({ email: managerEmail, role: 'Manager' });
+
+    if (!name || !code || !managerEmail) {
+      return res.status(400).json({ success: false, message: 'Vui lòng điền đầy đủ Tên, Mã dự án và Người quản lý!' });
+    }
+
+    const existingProject = await Project.findOne({ code });
+    if (existingProject) {
+      return res.status(400).json({ success: false, message: `Mã dự án "${code}" đã tồn tại! Vui lòng đặt mã khác.` });
+    }
+
+    const managerUser = await User.findOne({ email: managerEmail });
     if (!managerUser) {
-      return res.status(400).json({ success: false, message: 'Email Manager không hợp lệ hoặc người này không phải Manager!' });
+      return res.status(400).json({ success: false, message: 'Email người quản lý không tồn tại trong hệ thống!' });
     }
 
     const project = await Project.create({ name, code, managerEmail });
     res.json({ success: true, project });
   } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// WBS FOLDERS MANAGEMENT (ADMIN + MANAGER CỦA DỰ ÁN)
+// Folders WBS
 app.get('/api/folders', authenticateToken, async (req, res) => {
   const { projectId } = req.query;
   const folders = await Folder.find({ projectId });
@@ -258,15 +258,12 @@ app.get('/api/folders', authenticateToken, async (req, res) => {
 app.post('/api/folders', authenticateToken, requireRole(['Admin', 'Manager']), async (req, res) => {
   try {
     const { projectId, name } = req.body;
-    
-    // Kiểm tra nếu là Manager thì phải đúng là Manager của dự án này
     if (req.user.role === 'Manager') {
       const proj = await Project.findById(projectId);
       if (!proj || proj.managerEmail !== req.user.email) {
-        return res.status(403).json({ success: false, message: 'Bạn không có quyền quản lý dự án này!' });
+        return res.status(403).json({ success: false, message: 'Bạn không quản lý dự án này!' });
       }
     }
-
     const folder = await Folder.create({ projectId, name });
     res.json({ success: true, folder });
   } catch (err) {
@@ -274,13 +271,12 @@ app.post('/api/folders', authenticateToken, requireRole(['Admin', 'Manager']), a
   }
 });
 
-// TASKS MANAGEMENT (ADMIN + MANAGER CÓ QUYỀN TẠO & GÁN TASK)
+// Tasks
 app.get('/api/tasks', authenticateToken, async (req, res) => {
   const { projectId } = req.query;
   let query = {};
   if (projectId) query.projectId = projectId;
 
-  // Nếu là Member, chỉ thấy các Task gán cho chính mình
   if (req.user.role === 'Member') {
     query.assigneeEmail = req.user.email;
   }
@@ -292,14 +288,12 @@ app.get('/api/tasks', authenticateToken, async (req, res) => {
 app.post('/api/tasks', authenticateToken, requireRole(['Admin', 'Manager']), async (req, res) => {
   try {
     const { projectId, folderId, title, assigneeEmail } = req.body;
-
     if (req.user.role === 'Manager') {
       const proj = await Project.findById(projectId);
       if (!proj || proj.managerEmail !== req.user.email) {
         return res.status(403).json({ success: false, message: 'Bạn không quản lý dự án này!' });
       }
     }
-
     const task = await Task.create({ projectId, folderId: folderId || null, title, assigneeEmail });
     res.json({ success: true, task });
   } catch (err) {
@@ -307,7 +301,7 @@ app.post('/api/tasks', authenticateToken, requireRole(['Admin', 'Manager']), asy
   }
 });
 
-// MODULE 2: REPORTING (MEMBER/MANAGER/ADMIN GỬI BÁO CÁO)
+// Module 2: Reporting
 app.post('/api/report/submit', authenticateToken, async (req, res) => {
   try {
     const { taskId, note } = req.body;
@@ -315,7 +309,6 @@ app.post('/api/report/submit', authenticateToken, async (req, res) => {
 
     if (!task) return res.status(404).json({ message: 'Task không tồn tại' });
 
-    // Đảm bảo Member chỉ được báo cáo Task của chính mình
     if (req.user.role === 'Member' && task.assigneeEmail !== req.user.email) {
       return res.status(403).json({ success: false, message: 'Bạn không thể báo cáo công việc của người khác!' });
     }
@@ -338,13 +331,12 @@ app.post('/api/report/submit', authenticateToken, async (req, res) => {
   }
 });
 
-// MODULE 3: REPORT DATA (AUDIT LOGS & PHÊ DUYỆT 2 CẤP)
+// Module 3: Audit Logs & Duyệt 2 Cấp
 app.get('/api/report-data', authenticateToken, async (req, res) => {
   const { projectId } = req.query;
   let query = {};
   if (projectId) query.projectId = projectId;
 
-  // Nếu Member xem, chỉ xem lịch sử báo cáo của mình
   if (req.user.role === 'Member') {
     query.submittedByEmail = req.user.email;
   }
@@ -353,17 +345,16 @@ app.get('/api/report-data', authenticateToken, async (req, res) => {
   res.json(reports);
 });
 
-// PHÊ DUYỆT CẤP 1 (L1 APPROVAL - DÀNH CHO MANAGER & ADMIN)
 app.put('/api/report-data/:id/approve-l1', authenticateToken, requireRole(['Manager', 'Admin']), async (req, res) => {
   try {
-    const { action } = req.body; // 'APPROVE' hoặc 'REJECT'
+    const { action } = req.body;
     const reportLog = await ReportData.findById(req.params.id);
     if (!reportLog) return res.status(404).json({ message: 'Không tìm thấy phiếu báo cáo' });
 
     const task = await Task.findById(reportLog.taskId);
 
     if (action === 'APPROVE') {
-      task.status = 'L1 Approved'; // Chuyển sang trạng thái chờ L2 duyệt
+      task.status = 'L1 Approved';
       reportLog.status = 'L1 Approved';
     } else {
       task.status = 'Rejected';
@@ -380,17 +371,16 @@ app.put('/api/report-data/:id/approve-l1', authenticateToken, requireRole(['Mana
   }
 });
 
-// PHÊ DUYỆT CẤP 2 (L2 APPROVAL - CHỈ DÀNH CHO ADMIN MỚI ĐƯỢC CHUYỂN SANG COMPLETED)
 app.put('/api/report-data/:id/approve-l2', authenticateToken, requireRole(['Admin']), async (req, res) => {
   try {
-    const { action } = req.body; // 'APPROVE' hoặc 'REJECT'
+    const { action } = req.body;
     const reportLog = await ReportData.findById(req.params.id);
     if (!reportLog) return res.status(404).json({ message: 'Không tìm thấy phiếu báo cáo' });
 
     const task = await Task.findById(reportLog.taskId);
 
     if (action === 'APPROVE') {
-      task.status = 'Completed'; // HOÀN THÀNH CHÍNH THỨC
+      task.status = 'Completed';
       reportLog.status = 'Completed';
     } else {
       task.status = 'Rejected';
@@ -407,7 +397,7 @@ app.put('/api/report-data/:id/approve-l2', authenticateToken, requireRole(['Admi
   }
 });
 
-// MODULE 4: SUMMARY BI
+// Module 4: BI Summary
 app.get('/api/summary/:projectId', authenticateToken, async (req, res) => {
   const { projectId } = req.params;
   const tasks = await Task.find({ projectId }).populate('folderId');
