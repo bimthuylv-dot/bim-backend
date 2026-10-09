@@ -5,6 +5,9 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.get('/', (req, res) => {
+  res.send('🚀 BIM PPM API Server is running!');
+});
 
 // -------------------------------------------------------------------
 // 1. KẾT NỐI MONGODB ATLAS
