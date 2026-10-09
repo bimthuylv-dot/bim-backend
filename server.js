@@ -5,20 +5,33 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.get('/', (req, res) => {
-  res.send('🚀 BIM PPM API Server is running!');
-});
 
 // -------------------------------------------------------------------
-// 1. KẾT NỐI MONGODB ATLAS
+// 1. KẾT NỐI MONGODB ATLAS & TỰ ĐỘNG KHỞI TẠO ADMIN
 // -------------------------------------------------------------------
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/bim_ppm';
+
 mongoose.connect(MONGODB_URI)
-  .then(() => console.log('✅ Đã kết nối MongoDB Atlas thành công!'))
+  .then(async () => {
+    console.log('✅ Đã kết nối MongoDB Atlas thành công!');
+    
+    // Tự động kiểm tra và tạo tài khoản Admin đầu tiên nếu CSDL chưa có
+    const adminExists = await User.findOne({ email: 'bimthuylv@gmail.com' });
+    if (!adminExists) {
+      await User.create({
+        fullName: 'Thủy LV (Admin)',
+        email: 'bimthuylv@gmail.com',
+        password: '123456',
+        role: 'Admin',
+        department: 'Ban Giám Đốc'
+      });
+      console.log('🎉 Đã khởi tạo tài khoản Admin mặc định: bimthuylv@gmail.com / 123456');
+    }
+  })
   .catch(err => console.error('❌ Lỗi kết nối MongoDB:', err));
 
 // -------------------------------------------------------------------
-// 2. ĐỊNH NGHĨA SCHEMAS & MODELS
+// 2. SCHEMAS & MODELS (DATABASE STRUCTURE)
 // -------------------------------------------------------------------
 
 // User Schema
@@ -31,14 +44,13 @@ const userSchema = new mongoose.Schema({
 });
 const User = mongoose.model('User', userSchema);
 
-// Project Schema (Chứa Custom Fields linh hoạt)
+// Project Schema
 const projectSchema = new mongoose.Schema({
   name: { type: String, required: true },
   code: { type: String, required: true },
   managerEmail: String,
   approverL1Email: String,
   approverL2Email: String,
-  // Lưu danh sách các trường tùy chỉnh (VD: Khối lượng kế hoạch, Ngày bắt đầu...)
   customFields: [{
     key: String,       // VD: 'plannedQty'
     label: String,     // VD: 'Khối lượng kế hoạch'
@@ -48,7 +60,7 @@ const projectSchema = new mongoose.Schema({
 });
 const Project = mongoose.model('Project', projectSchema);
 
-// Folder (WBS) Schema
+// Folder Schema (WBS)
 const folderSchema = new mongoose.Schema({
   projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
   parentFolderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Folder', default: null },
@@ -56,7 +68,7 @@ const folderSchema = new mongoose.Schema({
 });
 const Folder = mongoose.model('Folder', folderSchema);
 
-// Task Schema (Chứa CustomData dạng Map/JSON động)
+// Task Schema
 const taskSchema = new mongoose.Schema({
   projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
   folderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Folder', default: null },
@@ -67,37 +79,45 @@ const taskSchema = new mongoose.Schema({
     enum: ['To Do', 'In Progress', 'Submitted', 'L1 Approved', 'Completed', 'Rejected'], 
     default: 'To Do' 
   },
-  // CustomData cho phép lưu bất kỳ cột trường dữ liệu động nào
   customData: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} },
   updatedAt: { type: Date, default: Date.now }
 });
 const Task = mongoose.model('Task', taskSchema);
 
-// ReportData Schema (Lịch sử báo cáo & Phê duyệt)
+// ReportData Schema
 const reportDataSchema = new mongoose.Schema({
   taskId: { type: mongoose.Schema.Types.ObjectId, ref: 'Task', required: true },
   projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
   submittedByEmail: String,
   reviewedByEmail: String,
-  status: String, // 'Submitted', 'Approved', 'Rejected'
+  status: String,
   note: String,
-  reportCustomData: { type: Map, of: mongoose.Schema.Types.Mixed }, // Snapshot dữ liệu báo cáo
+  reportCustomData: { type: Map, of: mongoose.Schema.Types.Mixed },
   createdAt: { type: Date, default: Date.now }
 });
 const ReportData = mongoose.model('ReportData', reportDataSchema);
 
 // -------------------------------------------------------------------
-// 3. HỆ THỐNG REST API CHO 4 MODULE
+// 3. API ROUTES
 // -------------------------------------------------------------------
+
+// Trang chủ kiểm tra Server Status
+app.get('/', (req, res) => {
+  res.send('🚀 BIM Enterprise PPM API Server (MongoDB) is running live!');
+});
 
 // Auth & Users
 app.post('/api/login', async (req, res) => {
-  const { email, password } = req.body;
-  const user = await User.findOne({ email });
-  if (!user || user.password !== password) {
-    return res.status(401).json({ success: false, message: 'Sai email hoặc mật khẩu!' });
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+    if (!user || user.password !== password) {
+      return res.status(401).json({ success: false, message: 'Email hoặc mật khẩu không chính xác!' });
+    }
+    res.json({ success: true, user });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-  res.json({ success: true, user });
 });
 
 app.get('/api/users', async (req, res) => {
@@ -106,11 +126,15 @@ app.get('/api/users', async (req, res) => {
 });
 
 app.post('/api/users', async (req, res) => {
-  const user = await User.create(req.body);
-  res.json({ success: true, user });
+  try {
+    const user = await User.create(req.body);
+    res.json({ success: true, user });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
 });
 
-// --- MODULE 1: PROJECT & WBS FOLDERS ---
+// Module 1: Projects & Custom Fields
 app.get('/api/projects', async (req, res) => {
   const projects = await Project.find({}).sort({ createdAt: -1 });
   res.json(projects);
@@ -121,14 +145,13 @@ app.post('/api/projects', async (req, res) => {
   res.json({ success: true, project });
 });
 
-// Thêm/Xóa Trường Tùy Chỉnh (Custom Field) cho Dự án
 app.put('/api/projects/:id/custom-fields', async (req, res) => {
   const { customFields } = req.body;
   const project = await Project.findByIdAndUpdate(req.params.id, { customFields }, { new: true });
   res.json({ success: true, project });
 });
 
-// Quản lý Thư mục WBS
+// WBS Folders
 app.get('/api/folders', async (req, res) => {
   const { projectId } = req.query;
   const folders = await Folder.find({ projectId });
@@ -140,7 +163,7 @@ app.post('/api/folders', async (req, res) => {
   res.json({ success: true, folder });
 });
 
-// Tạo & Lấy Task thuộc Dự án (Module Project)
+// Tasks
 app.get('/api/tasks', async (req, res) => {
   const { projectId, assigneeEmail } = req.query;
   let query = {};
@@ -156,14 +179,13 @@ app.post('/api/tasks', async (req, res) => {
   res.json({ success: true, task });
 });
 
-// --- MODULE 2: REPORT (Báo cáo trực tiếp từ người làm) ---
+// Module 2: Report
 app.post('/api/report/submit', async (req, res) => {
   const { taskId, submittedByEmail, note, customDataUpdate } = req.body;
   
   const task = await Task.findById(taskId);
   if (!task) return res.status(404).json({ message: 'Task không tồn tại' });
 
-  // Cập nhật CustomData thực tế vào Task
   if (customDataUpdate) {
     Object.keys(customDataUpdate).forEach(key => {
       task.customData.set(key, customDataUpdate[key]);
@@ -173,7 +195,6 @@ app.post('/api/report/submit', async (req, res) => {
   task.updatedAt = new Date();
   await task.save();
 
-  // Lưu một bản ghi lịch sử vào ReportData
   const reportLog = await ReportData.create({
     taskId,
     projectId: task.projectId,
@@ -186,24 +207,21 @@ app.post('/api/report/submit', async (req, res) => {
   res.json({ success: true, task, reportLog });
 });
 
-// --- MODULE 3: REPORTDATA (Kho xét duyệt & Lưu trữ Báo cáo) ---
+// Module 3: ReportData
 app.get('/api/report-data', async (req, res) => {
   const { projectId } = req.query;
   let query = {};
   if (projectId) query.projectId = projectId;
 
-  const reports = await ReportData.find(query)
-    .populate('taskId')
-    .sort({ createdAt: -1 });
+  const reports = await ReportData.find(query).populate('taskId').sort({ createdAt: -1 });
   res.json(reports);
 });
 
-// Duyệt hoặc Từ chối Báo cáo (L1/L2 Approvers)
 app.put('/api/report-data/:id/approve', async (req, res) => {
-  const { action, reviewedByEmail, note } = req.body; // action: 'APPROVE' hoặc 'REJECT'
+  const { action, reviewedByEmail } = req.body;
   
   const reportLog = await ReportData.findById(req.params.id);
-  if (!reportLog) return res.status(404).json({ message: 'Không tìm thấy báo cáo' });
+  if (!reportLog) return res.status(404).json({ message: 'Không tìm thấy phiếu báo cáo' });
 
   const task = await Task.findById(reportLog.taskId);
   
@@ -217,30 +235,24 @@ app.put('/api/report-data/:id/approve', async (req, res) => {
   }
 
   reportLog.reviewedByEmail = reviewedByEmail;
-  reportLog.note = note;
-
   await task.save();
   await reportLog.save();
 
   res.json({ success: true, task, reportLog });
 });
 
-// --- MODULE 4: SUMMARY (Tổng hợp thông tin đa chiều) ---
+// Module 4: Summary
 app.get('/api/summary/:projectId', async (req, res) => {
   const { projectId } = req.params;
   const tasks = await Task.find({ projectId }).populate('folderId');
   const project = await Project.findById(projectId);
 
-  // Thống kê tổng số lượng task theo trạng thái
   const statusSummary = {
     total: tasks.length,
     completed: tasks.filter(t => t.status === 'Completed').length,
-    inProgress: tasks.filter(t => t.status === 'In Progress').length,
-    submitted: tasks.filter(t => t.status === 'Submitted').length,
-    rejected: tasks.filter(t => t.status === 'Rejected').length
+    submitted: tasks.filter(t => t.status === 'Submitted').length
   };
 
-  // Tính tổng tổng tích lũy cho các trường kiểu Số (Numeric Custom Fields)
   const numericTotals = {};
   if (project && project.customFields) {
     project.customFields.filter(f => f.type === 'number').forEach(field => {
@@ -251,12 +263,7 @@ app.get('/api/summary/:projectId', async (req, res) => {
     });
   }
 
-  res.json({
-    project,
-    statusSummary,
-    numericTotals,
-    tasks
-  });
+  res.json({ project, statusSummary, numericTotals, tasks });
 });
 
 const PORT = process.env.PORT || 5000;
