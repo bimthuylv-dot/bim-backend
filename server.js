@@ -416,3 +416,29 @@ app.get('/api/summary/:projectId', authenticateToken, async (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Enterprise Server running on port ${PORT}`));
+// API XÓA TASK (DÀNH CHO ADMIN VÀ MANAGER)
+app.delete('/api/tasks/:id', authenticateToken, requireRole(['Admin', 'Manager']), async (req, res) => {
+  try {
+    const taskId = req.params.id;
+    const task = await Task.findById(taskId);
+
+    if (!task) {
+      return res.status(404).json({ success: false, message: 'Công việc không tồn tại!' });
+    }
+
+    // Kiểm tra quyền Manager dự án
+    if (req.user.role === 'Manager') {
+      const proj = await Project.findById(task.projectId);
+      if (!proj || proj.managerEmail !== req.user.email) {
+        return res.status(403).json({ success: false, message: 'Bạn không có quyền xóa công việc thuộc dự án này!' });
+      }
+    }
+
+    await Task.findByIdAndDelete(taskId);
+    await ReportData.deleteMany({ taskId }); // Xóa luôn lịch sử báo cáo của task này
+
+    res.json({ success: true, message: 'Đã xóa công việc thành công!' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
