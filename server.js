@@ -10,14 +10,11 @@ app.use(express.json());
 const JWT_SECRET = process.env.JWT_SECRET || 'BIM_PPM_ENTERPRISE_SECRET_KEY_2026';
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/bim_ppm';
 
-// -------------------------------------------------------------------
 // 1. KẾT NỐI MONGODB ATLAS & KHỞI TẠO TÀI KHOẢN MẶC ĐỊNH
-// -------------------------------------------------------------------
 mongoose.connect(MONGODB_URI)
   .then(async () => {
     console.log('✅ Đã kết nối MongoDB Atlas thành công!');
     
-    // Tự động khởi tạo Admin
     const adminExists = await User.findOne({ email: 'bimthuylv@gmail.com' });
     if (!adminExists) {
       await User.create({
@@ -27,10 +24,8 @@ mongoose.connect(MONGODB_URI)
         role: 'Admin',
         department: 'Ban Giám Đốc'
       });
-      console.log('🎉 Khởi tạo Admin: bimthuylv@gmail.com / 123456');
     }
 
-    // Tự động khởi tạo Manager
     const managerExists = await User.findOne({ email: 'manager@bim.com' });
     if (!managerExists) {
       await User.create({
@@ -40,10 +35,8 @@ mongoose.connect(MONGODB_URI)
         role: 'Manager',
         department: 'Ban Quản Lý Dự Án'
       });
-      console.log('🎉 Khởi tạo Manager mẫu: manager@bim.com / 123456');
     }
 
-    // Tự động khởi tạo Member
     const memberExists = await User.findOne({ email: 'member@bim.com' });
     if (!memberExists) {
       await User.create({
@@ -53,15 +46,11 @@ mongoose.connect(MONGODB_URI)
         role: 'Member',
         department: 'Phòng Thiết Kế'
       });
-      console.log('🎉 Khởi tạo Member mẫu: member@bim.com / 123456');
     }
   })
   .catch(err => console.error('❌ Lỗi kết nối MongoDB:', err));
 
-// -------------------------------------------------------------------
-// 2. SCHEMAS & MODELS (BỔ SUNG ĐẦY ĐỦ CÁC TRƯỜNG CỘT WBS GRID)
-// -------------------------------------------------------------------
-
+// 2. SCHEMAS & MODELS
 const userSchema = new mongoose.Schema({
   fullName: { type: String, required: true },
   email: { type: String, required: true, unique: true },
@@ -88,7 +77,6 @@ const taskSchema = new mongoose.Schema({
     enum: ['To Do', 'In Progress', 'Submitted', 'L1 Approved', 'Completed', 'Rejected'], 
     default: 'To Do' 
   },
-  // Các trường mới nâng cấp cho WBS Grid
   startDate: { type: String, default: () => new Date().toISOString().split('T')[0] },
   finishDate: { type: String, default: () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] },
   duration: { type: Number, default: 7 },
@@ -108,21 +96,20 @@ const reportDataSchema = new mongoose.Schema({
   reviewedByL2Email: String,
   status: { type: String, enum: ['Submitted', 'L1 Approved', 'Completed', 'Rejected'] },
   note: String,
+  work: { type: Number, default: 0 },
+  actual: { type: Number, default: 0 },
+  assess: { type: Number, default: 0 },
+  remain: { type: Number, default: 0 },
+  rebar: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now }
 });
 const ReportData = mongoose.model('ReportData', reportDataSchema);
 
-// -------------------------------------------------------------------
-// 3. MIDDLEWARE AUTHENTICATION & RBAC
-// -------------------------------------------------------------------
-
+// 3. MIDDLEWARE PHÂN QUYỀN JWT
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ success: false, message: 'Thiếu Token xác thực đăng nhập!' });
-  }
+  if (!token) return res.status(401).json({ success: false, message: 'Thiếu Token xác thực đăng nhập!' });
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) return res.status(403).json({ success: false, message: 'Token không hợp lệ hoặc đã hết hạn!' });
@@ -136,22 +123,19 @@ const requireRole = (allowedRoles) => {
     if (!req.user || !allowedRoles.includes(req.user.role)) {
       return res.status(403).json({ 
         success: false, 
-        message: `Bị từ chối! Chức năng này yêu cầu vai trò: ${allowedRoles.join(' hoặc ')}` 
+        message: `Bị từ chối! Yêu cầu vai trò: ${allowedRoles.join(' hoặc ')}` 
       });
     }
     next();
   };
 };
 
-// -------------------------------------------------------------------
 // 4. API ROUTES
-// -------------------------------------------------------------------
 
 app.get('/', (req, res) => {
   res.send('🚀 BIM Enterprise PPM API Server is running live!');
 });
 
-// Auth & Users
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -169,13 +153,7 @@ app.post('/api/login', async (req, res) => {
     res.json({
       success: true,
       token,
-      user: {
-        _id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        role: user.role,
-        department: user.department
-      }
+      user: { _id: user._id, fullName: user.fullName, email: user.email, role: user.role, department: user.department }
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -186,11 +164,9 @@ app.put('/api/change-password', authenticateToken, async (req, res) => {
   try {
     const { oldPassword, newPassword } = req.body;
     const user = await User.findById(req.user.id);
-
     if (user.password !== oldPassword) {
       return res.status(400).json({ success: false, message: 'Mật khẩu hiện tại không chính xác!' });
     }
-
     user.password = newPassword;
     await user.save();
     res.json({ success: true, message: 'Đổi mật khẩu thành công!' });
@@ -213,12 +189,9 @@ app.post('/api/users', authenticateToken, requireRole(['Admin']), async (req, re
   }
 });
 
-// Projects
 app.get('/api/projects', authenticateToken, async (req, res) => {
   let query = {};
-  if (req.user.role === 'Manager') {
-    query.managerEmail = req.user.email;
-  }
+  if (req.user.role === 'Manager') query.managerEmail = req.user.email;
   const projects = await Project.find(query).sort({ createdAt: -1 });
   res.json(projects);
 });
@@ -226,21 +199,13 @@ app.get('/api/projects', authenticateToken, async (req, res) => {
 app.post('/api/projects', authenticateToken, requireRole(['Admin']), async (req, res) => {
   try {
     const { name, code, managerEmail } = req.body;
-
     if (!name || !code || !managerEmail) {
       return res.status(400).json({ success: false, message: 'Vui lòng điền đầy đủ Tên, Mã dự án và Người quản lý!' });
     }
-
     const existingProject = await Project.findOne({ code });
     if (existingProject) {
       return res.status(400).json({ success: false, message: `Mã dự án "${code}" đã tồn tại!` });
     }
-
-    const managerUser = await User.findOne({ email: managerEmail });
-    if (!managerUser) {
-      return res.status(400).json({ success: false, message: 'Email người quản lý không tồn tại trong hệ thống!' });
-    }
-
     const project = await Project.create({ name, code, managerEmail });
     res.json({ success: true, project });
   } catch (err) {
@@ -248,45 +213,35 @@ app.post('/api/projects', authenticateToken, requireRole(['Admin']), async (req,
   }
 });
 
-// Tasks (Bổ sung tính năng Batch Insert, Di chuyển & Edit Inline)
 app.get('/api/tasks', authenticateToken, async (req, res) => {
   const { projectId } = req.query;
   let query = {};
   if (projectId) query.projectId = projectId;
-
-  if (req.user.role === 'Member') {
-    query.assigneeEmail = req.user.email;
-  }
-
+  if (req.user.role === 'Member') query.assigneeEmail = req.user.email;
   const tasks = await Task.find(query).sort({ orderIndex: 1, createdAt: 1 });
   res.json(tasks);
 });
 
-// TẠO 1 TASK ĐƠN LẺ
 app.post('/api/tasks', authenticateToken, requireRole(['Admin', 'Manager']), async (req, res) => {
   try {
     const { projectId, title, assigneeEmail } = req.body;
     const taskCount = await Task.countDocuments({ projectId });
-
     const task = await Task.create({
       projectId,
       title: title || 'Task mới',
       assigneeEmail,
       orderIndex: taskCount + 1
     });
-
     res.json({ success: true, task });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
   }
 });
 
-// CHÈN NHIỀU DÒNG CÙNG LÚC (BATCH INSERT ENHANCEMENT)
 app.post('/api/tasks/batch', authenticateToken, requireRole(['Admin', 'Manager']), async (req, res) => {
   try {
     const { projectId, count, assigneeEmail, insertAfterTaskId } = req.body;
     const numRows = Math.max(1, parseInt(count) || 1);
-
     let baseOrder = await Task.countDocuments({ projectId });
     let indent = 0;
 
@@ -295,7 +250,6 @@ app.post('/api/tasks/batch', authenticateToken, requireRole(['Admin', 'Manager']
       if (refTask) {
         baseOrder = refTask.orderIndex;
         indent = refTask.indentLevel;
-        // Đẩy thứ tự các task phía sau lên
         await Task.updateMany(
           { projectId, orderIndex: { $gt: baseOrder } },
           { $inc: { orderIndex: numRows } }
@@ -321,13 +275,11 @@ app.post('/api/tasks/batch', authenticateToken, requireRole(['Admin', 'Manager']
   }
 });
 
-// CẬP NHẬT TRỰC TIẾP Ô DỮ LIỆU CỘT (INLINE CELL EDIT)
 app.put('/api/tasks/:id', authenticateToken, requireRole(['Admin', 'Manager']), async (req, res) => {
   try {
     const taskId = req.params.id;
     const updateData = req.body;
     updateData.updatedAt = new Date();
-
     const updatedTask = await Task.findByIdAndUpdate(taskId, updateData, { new: true });
     res.json({ success: true, task: updatedTask });
   } catch (err) {
@@ -335,18 +287,14 @@ app.put('/api/tasks/:id', authenticateToken, requireRole(['Admin', 'Manager']), 
   }
 });
 
-// DI CHUYỂN VỊ TRÍ TASK (MOVE UP/DOWN)
 app.put('/api/tasks/:id/move', authenticateToken, requireRole(['Admin', 'Manager']), async (req, res) => {
   try {
     const taskId = req.params.id;
-    const { direction } = req.body; // 'UP' hoặc 'DOWN'
-
+    const { direction } = req.body;
     const currentTask = await Task.findById(taskId);
     if (!currentTask) return res.status(404).json({ message: 'Task không tồn tại' });
 
-    const operator = direction === 'UP' ? $lt : $gt;
     const sortOrder = direction === 'UP' ? -1 : 1;
-
     const neighborTask = await Task.findOne({
       projectId: currentTask.projectId,
       orderIndex: { [direction === 'UP' ? '$lt' : '$gt']: currentTask.orderIndex }
@@ -356,18 +304,15 @@ app.put('/api/tasks/:id/move', authenticateToken, requireRole(['Admin', 'Manager
       const tempIndex = currentTask.orderIndex;
       currentTask.orderIndex = neighborTask.orderIndex;
       neighborTask.orderIndex = tempIndex;
-
       await currentTask.save();
       await neighborTask.save();
     }
-
     res.json({ success: true, task: currentTask });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// XÓA TASK
 app.delete('/api/tasks/:id', authenticateToken, requireRole(['Admin', 'Manager']), async (req, res) => {
   try {
     const taskId = req.params.id;
@@ -379,12 +324,12 @@ app.delete('/api/tasks/:id', authenticateToken, requireRole(['Admin', 'Manager']
   }
 });
 
-// Reporting & Duyệt
+// REPORT & DUYỆT CẤP L1 / L2 (XỬ LÝ CHÍNH XÁC Ô WORK -> APPROVAL)
+
 app.post('/api/report/submit', authenticateToken, async (req, res) => {
   try {
-    const { taskId, note } = req.body;
+    const { taskId, note, work, actual, assess } = req.body;
     const task = await Task.findById(taskId);
-
     if (!task) return res.status(404).json({ message: 'Task không tồn tại' });
 
     if (req.user.role === 'Member' && task.assigneeEmail !== req.user.email) {
@@ -395,12 +340,21 @@ app.post('/api/report/submit', authenticateToken, async (req, res) => {
     task.updatedAt = new Date();
     await task.save();
 
+    const planVal = task.planQty || 100;
+    const workVal = (work !== undefined && work !== null && work !== '') ? Number(work) : planVal;
+    const actualVal = (actual !== undefined && actual !== null && actual !== '') ? Number(actual) : workVal;
+    const assessVal = (assess !== undefined && assess !== null && assess !== '') ? Number(assess) : 3;
+
     const reportLog = await ReportData.create({
       taskId,
       projectId: task.projectId,
       submittedByEmail: req.user.email,
       status: 'Submitted',
-      note
+      note: note || '',
+      work: workVal,
+      actual: actualVal,
+      assess: assessVal,
+      remain: Math.max(0, planVal - workVal)
     });
 
     res.json({ success: true, task, reportLog });
@@ -413,18 +367,16 @@ app.get('/api/report-data', authenticateToken, async (req, res) => {
   const { projectId } = req.query;
   let query = {};
   if (projectId) query.projectId = projectId;
-
-  if (req.user.role === 'Member') {
-    query.submittedByEmail = req.user.email;
-  }
+  if (req.user.role === 'Member') query.submittedByEmail = req.user.email;
 
   const reports = await ReportData.find(query).populate('taskId').sort({ createdAt: -1 });
   res.json(reports);
 });
 
+// DUYỆT L1 (MANAGER): CẬP NHẬT WORK VÀ GÁN VÀO TASK.APPROVEDQTY
 app.put('/api/report-data/:id/approve-l1', authenticateToken, requireRole(['Manager', 'Admin']), async (req, res) => {
   try {
-    const { action } = req.body;
+    const { action, work, actual, assess, note } = req.body;
     const reportLog = await ReportData.findById(req.params.id);
     if (!reportLog) return res.status(404).json({ message: 'Không tìm thấy phiếu báo cáo' });
 
@@ -433,6 +385,21 @@ app.put('/api/report-data/:id/approve-l1', authenticateToken, requireRole(['Mana
     if (action === 'APPROVE') {
       task.status = 'L1 Approved';
       reportLog.status = 'L1 Approved';
+
+      let finalWork = reportLog.work;
+      if (work !== undefined && work !== null && work !== '') {
+        finalWork = Number(work);
+      }
+
+      reportLog.work = finalWork;
+      task.approvedQty = finalWork; // Cập nhật Approval ở cấp L1
+
+      if (actual !== undefined && actual !== null && actual !== '') reportLog.actual = Number(actual);
+      if (assess !== undefined && assess !== null && assess !== '') reportLog.assess = Number(assess);
+      if (note !== undefined && note !== null) reportLog.note = note;
+
+      const planVal = task.planQty || 100;
+      reportLog.remain = Math.max(0, planVal - finalWork);
     } else {
       task.status = 'Rejected';
       reportLog.status = 'Rejected';
@@ -448,10 +415,10 @@ app.put('/api/report-data/:id/approve-l1', authenticateToken, requireRole(['Mana
   }
 });
 
-// KHI DUYỆT L2 -> TỰ ĐỘNG CẬP NHẬT CỘT APPROVAL = PLAN QTY
+// DUYỆT L2 (ADMIN): CẬP NHẬT CHÍNH THỨC CON SỐ WORK VÀO TASK.APPROVEDQTY (BỎ HẲN PLANQTY CỨNG)
 app.put('/api/report-data/:id/approve-l2', authenticateToken, requireRole(['Admin']), async (req, res) => {
   try {
-    const { action } = req.body;
+    const { action, work, actual, assess, note } = req.body;
     const reportLog = await ReportData.findById(req.params.id);
     if (!reportLog) return res.status(404).json({ message: 'Không tìm thấy phiếu báo cáo' });
 
@@ -459,8 +426,22 @@ app.put('/api/report-data/:id/approve-l2', authenticateToken, requireRole(['Admi
 
     if (action === 'APPROVE') {
       task.status = 'Completed';
-      task.approvedQty = task.planQty || 100; // Đồng bộ giá trị Approval = Plan
       reportLog.status = 'Completed';
+
+      let finalWork = reportLog.work;
+      if (work !== undefined && work !== null && work !== '') {
+        finalWork = Number(work);
+      }
+
+      reportLog.work = finalWork;
+      task.approvedQty = finalWork; // Ghi đè chính thức Approval = con số Work thực duyệt!
+
+      if (actual !== undefined && actual !== null && actual !== '') reportLog.actual = Number(actual);
+      if (assess !== undefined && assess !== null && assess !== '') reportLog.assess = Number(assess);
+      if (note !== undefined && note !== null) reportLog.note = note;
+
+      const planVal = task.planQty || 100;
+      reportLog.remain = Math.max(0, planVal - finalWork);
     } else {
       task.status = 'Rejected';
       reportLog.status = 'Rejected';
@@ -476,7 +457,6 @@ app.put('/api/report-data/:id/approve-l2', authenticateToken, requireRole(['Admi
   }
 });
 
-// Summary BI
 app.get('/api/summary/:projectId', authenticateToken, async (req, res) => {
   const { projectId } = req.params;
   const tasks = await Task.find({ projectId });
