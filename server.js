@@ -15,7 +15,7 @@ mongoose.connect(MONGODB_URI)
   .then(async () => {
     console.log('✅ Đã kết nối MongoDB Atlas thành công!');
     
-    // Tự động kiểm tra và tạo tài khoản Admin đầu tiên nếu CSDL chưa có
+    // Tự động khởi tạo tài khoản Admin đầu tiên nếu CSDL chưa có
     const adminExists = await User.findOne({ email: 'bimthuylv@gmail.com' });
     if (!adminExists) {
       await User.create({
@@ -106,7 +106,7 @@ app.get('/', (req, res) => {
   res.send('🚀 BIM Enterprise PPM API Server (MongoDB) is running live!');
 });
 
-// Auth & Users
+// Authentication
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -120,6 +120,29 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// Đổi mật khẩu
+app.put('/api/change-password', async (req, res) => {
+  try {
+    const { userId, oldPassword, newPassword } = req.body;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Người dùng không tồn tại!' });
+    }
+
+    if (user.password !== oldPassword) {
+      return res.status(400).json({ success: false, message: 'Mật khẩu cũ không chính xác!' });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    res.json({ success: true, message: 'Đổi mật khẩu thành công!' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Quản lý Users
 app.get('/api/users', async (req, res) => {
   const users = await User.find({});
   res.json(users);
@@ -207,7 +230,7 @@ app.post('/api/report/submit', async (req, res) => {
   res.json({ success: true, task, reportLog });
 });
 
-// Module 3: ReportData
+// Module 3: ReportData (Audit Logs & Approval)
 app.get('/api/report-data', async (req, res) => {
   const { projectId } = req.query;
   let query = {};
@@ -241,7 +264,7 @@ app.put('/api/report-data/:id/approve', async (req, res) => {
   res.json({ success: true, task, reportLog });
 });
 
-// Module 4: Summary
+// Module 4: Summary BI
 app.get('/api/summary/:projectId', async (req, res) => {
   const { projectId } = req.params;
   const tasks = await Task.find({ projectId }).populate('folderId');
