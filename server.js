@@ -472,6 +472,96 @@ app.get('/api/summary/:projectId', authenticateToken, async (req, res) => {
 
   res.json({ project, statusSummary, tasks });
 });
+// ==========================================
+// API NÂNG CẤP DÙNG CHO REPORTDATA & SUMMARY
+// ==========================================
+
+// 1. API LẤY DỮ LIỆU REPORT DATA THEO BỘ LỌC THỜI GIAN / DỰ ÁN / USER
+app.get('/api/report-data/filter', authenticateToken, async (req, res) => {
+  try {
+    const { projectId, userEmail, startWeek, endWeek } = req.query;
+    let query = {};
+
+    if (projectId && projectId !== 'ALL') {
+      query.projectId = projectId;
+    }
+    if (userEmail && userEmail !== 'ALL') {
+      query.submittedByEmail = userEmail;
+    }
+
+    if (req.user.role === 'Member') {
+      query.submittedByEmail = req.user.email;
+    }
+
+    const reports = await ReportData.find(query)
+      .populate('taskId')
+      .populate('projectId')
+      .sort({ createdAt: -1 });
+
+    res.json(reports);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// 2. API LẤY DỮ LIỆU TỔNG HỢP PIVOT SUMMARY THEO TUẦN
+app.get('/api/summary-matrix', authenticateToken, async (req, res) => {
+  try {
+    const { groupBy = 'Project' } = req.query;
+    let tasksQuery = {};
+
+    if (req.user.role === 'Manager') {
+      const myProjects = await Project.find({ managerEmail: req.user.email }).select('_id');
+      tasksQuery.projectId = { $in: myProjects.map(p => p._id) };
+    } else if (req.user.role === 'Member') {
+      tasksQuery.assigneeEmail = req.user.email;
+    }
+
+    const tasks = await Task.find(tasksQuery).populate('projectId');
+    const reports = await ReportData.find({}).populate('taskId');
+
+    // Mẫu tổng hợp Ma trận theo Tuần
+    const matrix = {};
+    const weekKeys = ['W35', 'W36', 'W37', 'W38', 'W39', 'W40', 'W41'];
+
+    tasks.forEach(t => {
+      const projName = t.projectId ? t.projectId.name : 'Chưa phân loại';
+      const key = groupBy === 'User' ? t.assigneeEmail : projName;
+      const agreementType = (t.title.toLowerCase().includes('shop')) ? 'Shop' : 'BIM';
+
+      if (!matrix[key]) {
+        matrix[key] = {
+          rowName: key,
+          agreement: agreementType,
+          totalPlan: 0,
+          totalApproval: 0,
+          weeks: {}
+        };
+        weekKeys.forEach(w => {
+          matrix[key].weeks[w] = { plan: 0, approval: 0 };
+        });
+      }
+
+      const taskPlan = t.planQty || 100;
+      const taskApproval = t.approvedQty || 0;
+
+      matrix[key].totalPlan += taskPlan;
+      matrix[key].totalApproval += taskApproval;
+
+      // Giả định phân bổ vào tuần W39 - W41 cho mẫu dữ liệu
+      const sampleWeek = 'W39';
+      matrix[key].weeks[sampleWeek].plan += taskPlan;
+      matrix[key].weeks[sampleWeek].approval += taskApproval;
+    });
+
+    res.json({
+      weekKeys,
+      matrixData: Object.values(matrix)
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Enterprise Server running on port ${PORT}`));
