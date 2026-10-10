@@ -1,0 +1,1736 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BIM Enterprise PPM System - Report Approval Grid</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800">
+
+  <!-- MÀN HÌNH ĐĂNG NHẬP -->
+  <div id="loginScreen" class="flex min-h-screen items-center justify-center p-4">
+    <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md space-y-6">
+      <div class="text-center">
+        <h2 class="text-2xl font-bold text-blue-700">BIM PPM ENTERPRISE</h2>
+        <p class="text-sm text-slate-500 mt-1">Hệ thống phân quyền quản trị dự án</p>
+      </div>
+      <form onsubmit="handleLogin(event)" class="space-y-4">
+        <div>
+          <label class="text-xs font-semibold uppercase text-slate-600">Email</label>
+          <input type="email" id="loginEmail" required value="bimthuylv@gmail.com" class="w-full border p-3 rounded-lg text-sm mt-1 outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div>
+          <label class="text-xs font-semibold uppercase text-slate-600">Mật khẩu</label>
+          <input type="password" id="loginPassword" required value="123456" class="w-full border p-3 rounded-lg text-sm mt-1 outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold p-3 rounded-lg text-sm">
+          Đăng nhập
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- BẢNG ĐIỀU KHIỂN CHÍNH (MAIN APP) -->
+  <div id="mainApp" class="hidden min-h-screen flex flex-col">
+    
+    <!-- TOP NAVBAR -->
+    <header class="bg-slate-900 text-white px-6 py-4 flex flex-wrap justify-between items-center shadow-md">
+      <div class="flex items-center space-x-6">
+        <span class="font-black text-xl tracking-wider text-blue-400">BIM PPM</span>
+        <nav class="flex space-x-2">
+          <button onclick="switchModule('project')" id="nav-project" class="px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 transition">📂 PROJECT</button>
+          <button onclick="switchModule('report')" id="nav-report" class="px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 transition">📝 REPORT</button>
+          <button onclick="switchModule('reportData')" id="nav-reportData" class="px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 transition">🗄️ REPORT DATA</button>
+          <button onclick="switchModule('summary')" id="nav-summary" class="px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 transition">📊 SUMMARY</button>
+        </nav>
+      </div>
+      <div class="flex items-center space-x-3">
+        <div class="text-right">
+          <p id="userName" class="text-sm font-bold">--</p>
+          <span id="userRoleBadge" class="px-2 py-0.5 rounded text-[10px] font-black uppercase">--</span>
+        </div>
+        <button onclick="openModal('changePassModal')" class="bg-amber-600/80 hover:bg-amber-600 px-3 py-1.5 rounded text-xs">🔑 Đổi MK</button>
+        <button id="adminCreateUserBtn" onclick="openModal('userModal')" class="bg-indigo-600/80 hover:bg-indigo-600 px-3 py-1.5 rounded text-xs hidden">+ Thêm User</button>
+        <button onclick="logout()" class="bg-red-600/80 hover:bg-red-600 px-3 py-1.5 rounded text-xs">Đăng xuất</button>
+      </div>
+    </header>
+
+    <main class="flex-1 p-6 max-w-[1600px] mx-auto w-full space-y-6">
+
+      <!-- SELECT DỰ ÁN DÙNG CHUNG -->
+      <div class="bg-white p-4 rounded-xl shadow-sm flex flex-wrap justify-between items-center gap-4">
+        <div class="flex items-center space-x-3">
+          <label class="text-sm font-bold text-slate-700">Dự án hiện tại:</label>
+          <select id="activeProjectSelect" onchange="onProjectChange()" class="border p-2 rounded-lg text-sm font-semibold text-blue-700 bg-slate-50 min-w-[280px]">
+          </select>
+        </div>
+        <div class="flex space-x-2">
+          <button id="adminCreateProjectBtn" onclick="openCreateProjectModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium hidden">+ Khai báo Dự án (Admin)</button>
+        </div>
+      </div>
+
+      <!-- MODULE 1: PROJECT -->
+      <section id="module-project" class="module-content space-y-4">
+        
+        <!-- WBS TOOLBAR -->
+        <div class="bg-white p-2.5 rounded-xl shadow-sm border flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div class="flex items-center space-x-1.5 flex-wrap gap-y-1">
+            <button onclick="moveTask('UP')" title="Chuyển Lên" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded font-semibold border flex items-center gap-1">Move ↟</button>
+            <button onclick="moveTask('DOWN')" title="Chuyển Xuống" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded font-semibold border flex items-center gap-1">Move ↳</button>
+            <button onclick="indentTask(-1)" title="Lùi lề" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold border">◂ Outdent</button>
+            <button onclick="indentTask(1)" title="Tăng lề" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold border">Indent ▸</button>
+
+            <button onclick="promptBatchInsert()" title="Chèn 1 hoặc nhiều dòng" class="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded font-semibold shadow-sm">+ Insert</button>
+
+            <button onclick="unselectTask()" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded font-semibold border">Unselect</button>
+            <button onclick="deleteSelectedTask()" class="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded font-semibold border border-red-200">Delete 🗑️</button>
+            
+            <div class="h-4 w-[1px] bg-slate-300 mx-1"></div>
+            
+            <button onclick="expandAllWBS()" class="px-2.5 py-1 bg-slate-200 font-bold rounded">1 (Hiện hết)</button>
+            <button onclick="collapseAllWBS()" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded">2 (Thu gọn)</button>
+            
+            <div class="h-4 w-[1px] bg-slate-300 mx-1"></div>
+            
+            <label class="flex items-center cursor-pointer space-x-1.5 font-semibold text-slate-600 select-none">
+              <input type="checkbox" id="myTasksOnlyToggle" onchange="renderProjectModule()" class="rounded text-blue-600 focus:ring-blue-500">
+              <span>my tasks only</span>
+            </label>
+          </div>
+
+          <div>
+            <button id="managerCreateTaskBtn" onclick="openCreateTaskModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm hidden">+ Tạo & Gán Task</button>
+          </div>
+        </div>
+
+        <div class="flex gap-3 items-start">
+          <!-- COLUMN CHOOSER BÊN TRÁI -->
+          <div class="w-48 bg-white border rounded-xl shadow-sm p-3 text-xs space-y-2 shrink-0 hidden md:block">
+            <div class="flex items-center space-x-1">
+              <input type="text" id="colSearchInput" oninput="filterColumnChooser(this.value)" placeholder="tìm kiếm ..." class="w-full border px-2 py-1 rounded outline-none text-xs">
+              <button onclick="clearColumnSearch()" class="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded font-bold">x</button>
+            </div>
+            <div id="columnChooserList" class="max-h-[500px] overflow-y-auto space-y-1.5 pr-1 font-medium text-slate-700">
+              <label class="col-item flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="chk-col-id" checked onchange="toggleColumn('col-id')" class="rounded text-blue-600"> <span>Id</span></label>
+              <label class="col-item flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="chk-col-status" checked onchange="toggleColumn('col-status')" class="rounded text-blue-600"> <span>Status</span></label>
+              <label class="col-item flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="chk-col-predecessors" checked onchange="toggleColumn('col-predecessors')" class="rounded text-blue-600"> <span>Predecessors</span></label>
+              <label class="col-item flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="chk-col-taskname" checked onchange="toggleColumn('col-taskname')" class="rounded text-blue-600"> <span>Task Name</span></label>
+              <label class="col-item flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="chk-col-start" checked onchange="toggleColumn('col-start')" class="rounded text-blue-600"> <span>Start</span></label>
+              <label class="col-item flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="chk-col-finish" checked onchange="toggleColumn('col-finish')" class="rounded text-blue-600"> <span>Finish</span></label>
+              <label class="col-item flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="chk-col-duration" checked onchange="toggleColumn('col-duration')" class="rounded text-blue-600"> <span>Duration</span></label>
+              <label class="col-item flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="chk-col-plan" checked onchange="toggleColumn('col-plan')" class="rounded text-blue-600"> <span>Plan</span></label>
+              <label class="col-item flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="chk-col-approval" checked onchange="toggleColumn('col-approval')" class="rounded text-blue-600"> <span>Approval</span></label>
+              <label class="col-item flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="chk-col-assign" checked onchange="toggleColumn('col-assign')" class="rounded text-blue-600"> <span>Assign to</span></label>
+            </div>
+          </div>
+
+          <!-- MAIN GRID CONTAINER -->
+          <div class="flex-1 bg-white border rounded-xl shadow-sm overflow-hidden overflow-x-auto min-h-[450px]">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr class="bg-[#5b9bd5] text-white font-bold whitespace-nowrap text-[11px] tracking-wide divide-x divide-blue-300">
+                  <th class="p-2 w-10 text-center col-id">#</th>
+                  <th class="p-2 w-28 col-status">Status 🔻</th>
+                  <th class="p-2 w-20 col-predecessors text-center">Predecessors</th>
+                  <th class="p-2 min-w-[220px] col-taskname">Task Name 🔻</th>
+                  <th class="p-2 w-28 col-start">Start 🔻</th>
+                  <th class="p-2 w-28 col-finish">Finish 🔻</th>
+                  <th class="p-2 w-16 col-duration text-center">Duration</th>
+                  <th class="p-2 w-20 col-plan text-center">Plan</th>
+                  <th class="p-2 w-20 col-approval text-center">Approval</th>
+                  <th class="p-2 w-36 col-assign">Assign to 🔻</th>
+                </tr>
+              </thead>
+              <tbody id="projectTableBody" class="divide-y divide-slate-200 text-slate-700">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- MODULE 2: REPORT (KHÓA CỨNG CỘT WEEK ĐỊNH DẠNG T41:2026) -->
+      <section id="module-report" class="module-content space-y-6 hidden">
+
+        <!-- MỤC 1: TO-DO / DRAFT -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border space-y-3">
+          <div class="flex justify-between items-center border-b pb-2">
+            <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+              <span>To-do / Draft</span>
+              <button onclick="renderReportModule()" title="Tải lại" class="text-emerald-600 hover:text-emerald-700 font-bold text-xs">↻</button>
+            </h3>
+          </div>
+          <div id="report-todo-container" class="text-xs">
+            <p class="text-slate-400 italic">Vui lòng chờ trong chốc lát ...</p>
+          </div>
+        </div>
+
+        <!-- MỤC 2: PROJECT (DUYỆT L1) -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border space-y-3">
+          <div class="flex justify-between items-center border-b pb-2">
+            <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+              <span class="text-blue-700 font-extrabold">Project (Chờ duyệt L1 - Manager)</span>
+              <button onclick="renderReportModule()" title="Tải lại" class="text-emerald-600 hover:text-emerald-700 font-bold text-xs">↻</button>
+            </h3>
+          </div>
+          <div class="overflow-x-auto border rounded-lg">
+            <table class="w-full text-left text-xs border-collapse min-w-[1000px]">
+              <thead>
+                <tr class="bg-[#5b9bd5] text-white font-bold text-[11px] divide-x divide-blue-300">
+                  <th class="p-2.5 w-12 text-center">🔒/Thao tác</th>
+                  <th class="p-2.5 w-28">Week</th>
+                  <th class="p-2.5 w-28">Project 🔻</th>
+                  <th class="p-2.5 w-32">Employee 🔻</th>
+                  <th class="p-2.5 min-w-[160px]">Task</th>
+                  <th class="p-2.5 w-24">Start</th>
+                  <th class="p-2.5 w-24">Finish</th>
+                  <th class="p-2.5 w-16 text-center">Plan</th>
+                  <th class="p-2.5 w-16 text-center">Remain</th>
+                  <th class="p-2.5 w-20 text-center font-black bg-blue-600">Work (Approval) ✏️</th>
+                  <th class="p-2.5 w-20 text-center">Actual ✏️</th>
+                  <th class="p-2.5 w-20 text-center">Assess ✏️</th>
+                  <th class="p-2.5 w-32">Note</th>
+                  <th class="p-2.5 w-20">Rebar (kg)</th>
+                </tr>
+              </thead>
+              <tbody id="reportL1TableBody" class="divide-y divide-slate-200 text-slate-700">
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- MỤC 3: PROJECT GROUP (DUYỆT L2) -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border space-y-3">
+          <div class="flex justify-between items-center border-b pb-2">
+            <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+              <span class="text-indigo-700 font-extrabold">Project Group (Chờ duyệt L2 - Admin)</span>
+              <button onclick="renderReportModule()" title="Tải lại" class="text-emerald-600 hover:text-emerald-700 font-bold text-xs">↻</button>
+            </h3>
+          </div>
+          <div class="overflow-x-auto border rounded-lg">
+            <table class="w-full text-left text-xs border-collapse min-w-[1000px]">
+              <thead>
+                <tr class="bg-[#5b9bd5] text-white font-bold text-[11px] divide-x divide-blue-300">
+                  <th class="p-2.5 w-12 text-center">🔒/Thao tác</th>
+                  <th class="p-2.5 w-28">Week</th>
+                  <th class="p-2.5 w-28">Project 🔻</th>
+                  <th class="p-2.5 w-32">Employee 🔻</th>
+                  <th class="p-2.5 min-w-[160px]">Task</th>
+                  <th class="p-2.5 w-24">Start</th>
+                  <th class="p-2.5 w-24">Finish</th>
+                  <th class="p-2.5 w-16 text-center">Plan</th>
+                  <th class="p-2.5 w-16 text-center">Remain</th>
+                  <th class="p-2.5 w-20 text-center font-black bg-emerald-600">Work (Approval) ✏️</th>
+                  <th class="p-2.5 w-20 text-center">Actual ✏️</th>
+                  <th class="p-2.5 w-20 text-center">Assess ✏️</th>
+                  <th class="p-2.5 w-32">Note</th>
+                  <th class="p-2.5 w-20">Rebar (kg)</th>
+                </tr>
+              </thead>
+              <tbody id="reportL2TableBody" class="divide-y divide-slate-200 text-slate-700">
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- MỤC 4: SENT -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border space-y-3">
+          <div class="flex justify-between items-center border-b pb-2">
+            <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+              <span class="text-slate-900 font-extrabold">Sent</span>
+              <button onclick="renderReportModule()" title="Tải lại" class="text-emerald-600 hover:text-emerald-700 font-bold text-xs">↻</button>
+            </h3>
+          </div>
+          <div class="overflow-x-auto border rounded-lg">
+            <table class="w-full text-left text-xs border-collapse min-w-[1000px]">
+              <thead>
+                <tr class="bg-[#5b9bd5] text-white font-bold text-[11px] divide-x divide-blue-300">
+                  <th class="p-2.5 w-8 text-center">#</th>
+                  <th class="p-2.5 w-28">Week</th>
+                  <th class="p-2.5 w-28">Project 🔻</th>
+                  <th class="p-2.5 w-32">Employee 🔻</th>
+                  <th class="p-2.5 min-w-[150px]">Task</th>
+                  <th class="p-2.5 w-24">Start</th>
+                  <th class="p-2.5 w-24">Finish</th>
+                  <th class="p-2.5 w-16 text-center">Plan</th>
+                  <th class="p-2.5 w-16 text-center">Remain</th>
+                  <th class="p-2.5 w-16 text-center">Work</th>
+                  <th class="p-2.5 w-16 text-center">Actual</th>
+                  <th class="p-2.5 w-20 text-center">Assess 🔻</th>
+                  <th class="p-2.5 w-32">Note</th>
+                  <th class="p-2.5 w-20">Rebar (kg)</th>
+                  <th class="p-2.5 w-40">Review by</th>
+                </tr>
+              </thead>
+              <tbody id="reportSentTableBody" class="divide-y divide-slate-200 text-slate-700">
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- MODULE 3: REPORT DATA -->
+      <section id="module-reportData" class="module-content space-y-4 hidden">
+        <div class="bg-white p-3 rounded-xl shadow-sm border flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div class="relative inline-block">
+            <button onclick="toggleReportDataColMenu()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-sm">
+              <span>Add/Hide Column</span>
+              <span>🔻</span>
+            </button>
+            <div id="reportDataColMenu" class="hidden absolute left-0 mt-1 w-48 bg-white border rounded-xl shadow-xl z-30 p-2.5 space-y-1.5 text-slate-700">
+              <label class="flex items-center space-x-2 cursor-pointer p-1 hover:bg-slate-50 rounded"><input type="checkbox" id="rd-chk-stt" checked onchange="toggleRDCol('rd-col-stt')" class="rounded text-blue-600"> <span>STT</span></label>
+              <label class="flex items-center space-x-2 cursor-pointer p-1 hover:bg-slate-50 rounded"><input type="checkbox" id="rd-chk-week" checked onchange="toggleRDCol('rd-col-week')" class="rounded text-blue-600"> <span>Week</span></label>
+              <label class="flex items-center space-x-2 cursor-pointer p-1 hover:bg-slate-50 rounded"><input type="checkbox" id="rd-chk-owner" checked onchange="toggleRDCol('rd-col-owner')" class="rounded text-blue-600"> <span>Owner</span></label>
+              <label class="flex items-center space-x-2 cursor-pointer p-1 hover:bg-slate-50 rounded"><input type="checkbox" id="rd-chk-proj" checked onchange="toggleRDCol('rd-col-proj')" class="rounded text-blue-600"> <span>Project</span></label>
+              <label class="flex items-center space-x-2 cursor-pointer p-1 hover:bg-slate-50 rounded"><input type="checkbox" id="rd-chk-name" checked onchange="toggleRDCol('rd-col-name')" class="rounded text-blue-600"> <span>Name</span></label>
+              <label class="flex items-center space-x-2 cursor-pointer p-1 hover:bg-slate-50 rounded"><input type="checkbox" id="rd-chk-note" checked onchange="toggleRDCol('rd-col-note')" class="rounded text-blue-600"> <span>Note</span></label>
+              <label class="flex items-center space-x-2 cursor-pointer p-1 hover:bg-slate-50 rounded"><input type="checkbox" id="rd-chk-dates" checked onchange="toggleRDCol('rd-col-dates')" class="rounded text-blue-600"> <span>Dates</span></label>
+              <label class="flex items-center space-x-2 cursor-pointer p-1 hover:bg-slate-50 rounded"><input type="checkbox" id="rd-chk-info" checked onchange="toggleRDCol('rd-col-info')" class="rounded text-blue-600"> <span>Info WBS</span></label>
+            </div>
+          </div>
+
+          <div class="flex items-center space-x-1.5 bg-blue-50 p-1 rounded-lg border border-blue-200">
+            <button onclick="renderReportDataModule()" class="bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-3 py-1.5 rounded flex items-center gap-1 shadow-sm">
+              <span>LOAD</span>
+              <span>▶</span>
+            </button>
+            <div class="bg-blue-600 text-white px-3 py-1 rounded font-bold text-[11px] flex flex-col justify-center">
+              <span>THỜI GIAN:</span>
+              <span id="rdTimeDisplay" class="text-[10px] font-normal">T39:2026 - T41:2026</span>
+            </div>
+            <div class="bg-blue-600 text-white px-2 py-1 rounded font-bold text-[11px] flex flex-col justify-center">
+              <span>DỰ ÁN:</span>
+              <select id="rdFilterProject" onchange="renderReportDataModule()" class="bg-blue-700 text-white outline-none rounded text-[11px] font-semibold cursor-pointer">
+                <option value="ALL">ALL</option>
+              </select>
+            </div>
+            <div class="bg-blue-600 text-white px-2 py-1 rounded font-bold text-[11px] flex flex-col justify-center">
+              <span>USER:</span>
+              <select id="rdFilterUser" onchange="renderReportDataModule()" class="bg-blue-700 text-white outline-none rounded text-[11px] font-semibold cursor-pointer">
+                <option value="ALL">ALL</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white border rounded-xl shadow-sm overflow-hidden overflow-x-auto min-h-[450px]">
+          <table class="w-full text-left text-xs border-collapse min-w-[1300px]">
+            <thead>
+              <tr class="bg-[#5b9bd5] text-white font-bold text-[11px] divide-x divide-blue-300">
+                <th class="p-2.5 w-10 text-center rd-col-stt">STT</th>
+                <th class="p-2.5 w-24 rd-col-week">Week 🔻</th>
+                <th class="p-2.5 w-28 rd-col-owner">Owner 🔻</th>
+                <th class="p-2.5 w-28 rd-col-proj">Project 🔻</th>
+                <th class="p-2.5 min-w-[180px] rd-col-name">Name 🔻</th>
+                <th class="p-2.5 w-32 rd-col-note">Note 🔻</th>
+                <th class="p-2.5 w-24 rd-col-dates">StartDate</th>
+                <th class="p-2.5 w-24 rd-col-dates">FinishDate</th>
+                <th class="p-2.5 w-16 text-center">Plan</th>
+                <th class="p-2.5 w-16 text-center">Submit</th>
+                <th class="p-2.5 w-16 text-center">Approve</th>
+                <th class="p-2.5 w-16 text-center">Actual</th>
+                <th class="p-2.5 w-20 text-center">Assessment 🔻</th>
+                <th class="p-2.5 w-24 text-center">State 🔻</th>
+                <th class="p-2.5 w-16 text-center">Detail</th>
+                <th class="p-2.5 min-w-[240px] text-center bg-blue-600 font-extrabold rd-col-info">Info (Phân cấp Folder Project)</th>
+              </tr>
+            </thead>
+            <tbody id="reportDataGridTbody" class="divide-y divide-slate-200 text-slate-700">
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- MODULE 4: SUMMARY -->
+      <section id="module-summary" class="module-content space-y-4 hidden">
+        <div class="bg-white p-3 rounded-xl shadow-sm border flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div class="flex items-center space-x-1.5 bg-blue-50 p-1 rounded-lg border border-blue-200">
+            <button onclick="renderSummaryModule()" class="bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-3 py-1.5 rounded flex items-center gap-1 shadow-sm">
+              <span>LOAD</span>
+              <span>▶</span>
+            </button>
+            <div class="bg-blue-600 text-white px-3 py-1 rounded font-bold text-[11px] flex flex-col justify-center">
+              <span>THỜI GIAN:</span>
+              <span id="summaryTimeDisplay" class="text-[10px] font-normal">T35:2026 - T41:2026</span>
+            </div>
+            <div class="bg-blue-600 text-white px-2.5 py-1 rounded font-bold text-[11px] flex flex-col justify-center">
+              <span>DỰ ÁN:</span>
+              <span class="text-[10px] font-semibold">ALL</span>
+            </div>
+            <div class="bg-blue-600 text-white px-2.5 py-1 rounded font-bold text-[11px] flex flex-col justify-center">
+              <span>USER:</span>
+              <span class="text-[10px] font-semibold">ALL</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-4 items-start">
+          <div class="w-64 bg-white border rounded-xl shadow-sm p-3.5 text-xs space-y-4 shrink-0">
+            <div class="flex items-center space-x-4 border-b pb-2 font-bold text-slate-700">
+              <label class="flex items-center space-x-1.5 cursor-pointer">
+                <input type="radio" name="sumGroupRadio" value="Project" checked onchange="renderSummaryModule()" class="text-blue-600 focus:ring-blue-500">
+                <span>Project</span>
+              </label>
+              <label class="flex items-center space-x-1.5 cursor-pointer">
+                <input type="radio" name="sumGroupRadio" value="User" onchange="renderSummaryModule()" class="text-blue-600 focus:ring-blue-500">
+                <span>User</span>
+              </label>
+            </div>
+
+            <div class="space-y-2">
+              <div class="flex space-x-1.5">
+                <button onclick="renderSummaryModule()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 rounded shadow-sm">Load Data</button>
+                <button onclick="alert('Đã cập nhật bộ lọc ma trận!')" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-1.5 rounded shadow-sm">Add Filter</button>
+              </div>
+            </div>
+
+            <div class="space-y-1.5 max-h-44 overflow-y-auto pr-1 border-t pt-2 text-slate-700 font-medium">
+              <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" checked class="rounded text-blue-600"> <span>Project</span></label>
+              <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" class="rounded text-blue-600"> <span>Owner</span></label>
+              <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" class="rounded text-blue-600"> <span>Group Owner</span></label>
+              <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" class="rounded text-blue-600"> <span>Employee</span></label>
+              <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" checked class="rounded text-blue-600"> <span>Agreement BIM/Shop</span></label>
+              <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" class="rounded text-blue-600"> <span>Discipline</span></label>
+            </div>
+
+            <div class="border-t pt-2 space-y-1">
+              <p class="font-bold text-slate-700">Planwork/Approval:</p>
+              <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="chkSumPlan" checked onchange="renderSummaryModule()" class="rounded text-blue-600"> <span>Planwork</span></label>
+              <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" id="chkSumApprove" checked onchange="renderSummaryModule()" class="rounded text-blue-600"> <span>Approval</span></label>
+            </div>
+
+            <div class="border-t pt-2 space-y-1">
+              <p class="font-bold text-slate-700">Bộ lọc tuần (ISO):</p>
+              <div class="text-xs space-y-1 text-slate-600 pl-1 font-mono">
+                <div class="font-bold text-slate-800">▼ 2026</div>
+                <div class="pl-3 space-y-1">
+                  <div>
+                    <span class="font-bold text-blue-700">▼ Q4 (2026)</span>
+                    <div class="pl-3 space-y-1 pt-1 font-sans">
+                      <label class="flex items-center space-x-1.5"><input type="checkbox" class="chk-week-filter" value="T37:2026" checked onchange="renderSummaryModule()"> <span>T37:2026</span></label>
+                      <label class="flex items-center space-x-1.5"><input type="checkbox" class="chk-week-filter" value="T38:2026" checked onchange="renderSummaryModule()"> <span>T38:2026</span></label>
+                      <label class="flex items-center space-x-1.5"><input type="checkbox" class="chk-week-filter" value="T39:2026" checked onchange="renderSummaryModule()"> <span>T39:2026</span></label>
+                      <label class="flex items-center space-x-1.5"><input type="checkbox" class="chk-week-filter" value="T40:2026" checked onchange="renderSummaryModule()"> <span>T40:2026</span></label>
+                      <label class="flex items-center space-x-1.5"><input type="checkbox" class="chk-week-filter" value="T41:2026" checked onchange="renderSummaryModule()"> <span>T41:2026</span></label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="flex-1 bg-white border rounded-xl shadow-sm overflow-hidden overflow-x-auto min-h-[450px]">
+            <table class="w-full text-left text-xs border-collapse min-w-[900px]">
+              <thead id="summaryTableHead">
+              </thead>
+              <tbody id="summaryTableBody" class="divide-y divide-slate-200 text-slate-700">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODALS -->
+  <div id="reportDetailModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+    <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-lg space-y-4">
+      <h3 class="text-lg font-bold text-slate-800 border-b pb-2 flex justify-between items-center">
+        <span>📄 Chi Tiết Báo Cáo Tiến Độ</span>
+        <button onclick="closeModal('reportDetailModal')" class="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+      </h3>
+      <div id="reportDetailBody" class="space-y-3 text-xs">
+      </div>
+      <div class="flex justify-end pt-2 border-t">
+        <button type="button" onclick="closeModal('reportDetailModal')" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="projectModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+    <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md space-y-4">
+      <h3 class="text-lg font-bold text-slate-800 border-b pb-2">➕ Khai báo Dự án Mới</h3>
+      <form onsubmit="handleCreateProject(event)" class="space-y-4">
+        <div>
+          <label class="text-xs font-bold uppercase text-slate-600">Tên Dự án</label>
+          <input type="text" id="projName" required placeholder="VD: Tòa nhà văn phòng A" class="w-full border p-2.5 rounded-lg text-sm mt-1">
+        </div>
+        <div>
+          <label class="text-xs font-bold uppercase text-slate-600">Mã Dự án</label>
+          <input type="text" id="projCode" required placeholder="VD: PRJ-001" class="w-full border p-2.5 rounded-lg text-sm mt-1">
+        </div>
+        <div>
+          <label class="text-xs font-bold uppercase text-slate-600">Chọn Người quản lý Dự án</label>
+          <select id="projManagerSelect" required class="w-full border p-2.5 rounded-lg text-sm mt-1 bg-slate-50 font-medium text-blue-700">
+          </select>
+        </div>
+        <div class="flex justify-end space-x-2 pt-2">
+          <button type="button" onclick="closeModal('projectModal')" class="px-4 py-2 bg-slate-200 rounded-lg text-sm font-semibold">Hủy</button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold">Khai báo Dự án</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="taskModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+    <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md space-y-4">
+      <h3 class="text-lg font-bold text-slate-800 border-b pb-2">📋 Tạo & Gán Công Việc (Task)</h3>
+      <form onsubmit="handleCreateTask(event)" class="space-y-4">
+        <div>
+          <label class="text-xs font-bold uppercase text-slate-600">Tên Công việc (Task Title)</label>
+          <input type="text" id="taskTitle" required class="w-full border p-2.5 rounded-lg text-sm mt-1">
+        </div>
+        <div>
+          <label class="text-xs font-bold uppercase text-slate-600">Chọn Người thực hiện (Assignee)</label>
+          <select id="taskAssigneeSelect" required class="w-full border p-2.5 rounded-lg text-sm mt-1 bg-slate-50 font-medium text-emerald-700">
+          </select>
+        </div>
+        <div class="flex justify-end space-x-2 pt-2">
+          <button type="button" onclick="closeModal('taskModal')" class="px-4 py-2 bg-slate-200 rounded-lg text-sm font-semibold">Hủy</button>
+          <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold">Tạo & Gán Task</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="userModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+    <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md space-y-4">
+      <h3 class="text-lg font-bold text-slate-800 border-b pb-2">👤 Thêm Tài Khoản Người Dùng</h3>
+      <form onsubmit="handleCreateUser(event)" class="space-y-4">
+        <div>
+          <label class="text-xs font-bold uppercase text-slate-600">Họ và Tên</label>
+          <input type="text" id="userFullName" required class="w-full border p-2.5 rounded-lg text-sm mt-1">
+        </div>
+        <div>
+          <label class="text-xs font-bold uppercase text-slate-600">Email Đăng Nhập</label>
+          <input type="email" id="userEmail" required class="w-full border p-2.5 rounded-lg text-sm mt-1">
+        </div>
+        <div>
+          <label class="text-xs font-bold uppercase text-slate-600">Vai trò (Role)</label>
+          <select id="userRoleSelect" required class="w-full border p-2.5 rounded-lg text-sm mt-1 bg-slate-50 font-medium">
+            <option value="Member">🟢 Member (Kỹ sư / Nhân viên)</option>
+            <option value="Manager">🟡 Manager (Quản lý Dự án)</option>
+            <option value="Admin">🔴 Admin (Ban Giám Đốc)</option>
+          </select>
+        </div>
+        <div class="flex justify-end space-x-2 pt-2">
+          <button type="button" onclick="closeModal('userModal')" class="px-4 py-2 bg-slate-200 rounded-lg text-sm font-semibold">Hủy</button>
+          <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold">Tạo Tài Khoản</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="reportModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+    <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md space-y-4">
+      <h3 class="text-lg font-bold text-slate-800 border-b pb-2">📝 Gửi Báo Cáo Tiến Độ</h3>
+      <form onsubmit="handleSubmitReport(event)" class="space-y-4">
+        <input type="hidden" id="reportTaskId">
+        <div>
+          <label class="text-xs font-bold uppercase text-slate-600">Nội dung / Ghi chú Báo cáo</label>
+          <textarea id="reportNote" required rows="3" class="w-full border p-2.5 rounded-lg text-sm mt-1"></textarea>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <div>
+            <label class="text-[10px] font-bold uppercase text-slate-600">Work</label>
+            <input type="number" id="reportWorkInput" value="100" class="w-full border p-2 rounded text-xs font-mono">
+          </div>
+          <div>
+            <label class="text-[10px] font-bold uppercase text-slate-600">Actual</label>
+            <input type="number" id="reportActualInput" value="100" class="w-full border p-2 rounded text-xs font-mono">
+          </div>
+          <div>
+            <label class="text-[10px] font-bold uppercase text-slate-600">Assess (1-5)</label>
+            <input type="number" id="reportAssessInput" value="3" min="1" max="5" class="w-full border p-2 rounded text-xs font-mono">
+          </div>
+        </div>
+        <div class="flex justify-end space-x-2 pt-2">
+          <button type="button" onclick="closeModal('reportModal')" class="px-4 py-2 bg-slate-200 rounded-lg text-sm font-semibold">Hủy</button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold">Gửi Báo Cáo</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="changePassModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4 z-50">
+    <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-md space-y-4">
+      <h3 class="text-lg font-bold text-slate-800 border-b pb-2">🔑 Đổi Mật Khẩu Cá Nhân</h3>
+      <form onsubmit="handleChangePassword(event)" class="space-y-4">
+        <div>
+          <label class="text-xs font-bold uppercase text-slate-600">Mật khẩu Hiện tại</label>
+          <input type="password" id="oldPassInput" required class="w-full border p-2.5 rounded-lg text-sm mt-1">
+        </div>
+        <div>
+          <label class="text-xs font-bold uppercase text-slate-600">Mật khẩu Mới</label>
+          <input type="password" id="newPassInput" required minlength="6" class="w-full border p-2.5 rounded-lg text-sm mt-1">
+        </div>
+        <div class="flex justify-end space-x-2 pt-2">
+          <button type="button" onclick="closeModal('changePassModal')" class="px-4 py-2 bg-slate-200 rounded-lg text-sm font-semibold">Hủy</button>
+          <button type="submit" class="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-semibold">Cập Nhật Mật Khẩu</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'https://bim-backend-a41c.onrender.com';
+
+    let token = localStorage.getItem('bim_jwt_token');
+    let currentUser = null;
+    let projects = [];
+    let currentProject = null;
+    let allUsers = [];
+
+    let selectedTaskId = null;
+    let hiddenColumns = new Set();
+    let collapsedTasks = new Set();
+    let rdHiddenCols = new Set();
+    let currentFetchedReports = [];
+
+    // HÀM QUY ĐỔI TUẦN THỜI GIAN THỰC ĐỊNH DẠNG T41:2026
+    function getWeekString(d = new Date()) {
+      const date = new Date(d.getTime());
+      date.setHours(0, 0, 0, 0);
+      date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
+      const week1 = new Date(date.getFullYear(), 0, 4);
+      const weekNum = 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+      return `T${weekNum}:${date.getFullYear()}`;
+    }
+
+    window.onload = () => {
+      const savedUser = localStorage.getItem('bim_user_info');
+      if (token && savedUser) {
+        currentUser = JSON.parse(savedUser);
+        initApp();
+      }
+    };
+
+    function openModal(modalId) {
+      document.getElementById(modalId).classList.remove('hidden');
+      document.getElementById(modalId).classList.add('flex');
+    }
+
+    function closeModal(modalId) {
+      document.getElementById(modalId).classList.add('hidden');
+      document.getElementById(modalId).classList.remove('flex');
+    }
+
+    async function apiFetch(url, options = {}) {
+      options.headers = options.headers || {};
+      options.headers['Content-Type'] = 'application/json';
+      if (token) {
+        options.headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch(API_URL + url, options);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: 'Lỗi kết nối Server (' + res.status + ')' }));
+        alert('⚠️ Lỗi: ' + (err.message || 'Thao tác thất bại!'));
+      }
+      return res;
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const email = document.getElementById('loginEmail').value;
+      const password = document.getElementById('loginPassword').value;
+
+      try {
+        const res = await fetch(API_URL + '/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (data.success) {
+          token = data.token;
+          currentUser = data.user;
+          localStorage.setItem('bim_jwt_token', token);
+          localStorage.setItem('bim_user_info', JSON.stringify(currentUser));
+          initApp();
+        } else {
+          alert(data.message);
+        }
+      } catch (err) {
+        alert('Không thể kết nối đến Backend Server!');
+      }
+    }
+
+    function logout() {
+      localStorage.clear();
+      location.reload();
+    }
+
+    async function initApp() {
+      document.getElementById('loginScreen').classList.add('hidden');
+      document.getElementById('mainApp').classList.remove('hidden');
+      document.getElementById('userName').innerText = currentUser.fullName;
+      
+      const badge = document.getElementById('userRoleBadge');
+      badge.innerText = currentUser.role;
+      if (currentUser.role === 'Admin') badge.className = 'px-2 py-0.5 rounded text-[10px] font-black uppercase bg-red-100 text-red-700';
+      else if (currentUser.role === 'Manager') badge.className = 'px-2 py-0.5 rounded text-[10px] font-black uppercase bg-amber-100 text-amber-700';
+      else badge.className = 'px-2 py-0.5 rounded text-[10px] font-black uppercase bg-green-100 text-green-700';
+
+      if (currentUser.role === 'Admin') {
+        document.getElementById('adminCreateUserBtn').classList.remove('hidden');
+        document.getElementById('adminCreateProjectBtn').classList.remove('hidden');
+        document.getElementById('managerCreateTaskBtn').classList.remove('hidden');
+      } else if (currentUser.role === 'Manager') {
+        document.getElementById('managerCreateTaskBtn').classList.remove('hidden');
+      }
+
+      await loadUsers();
+      await loadProjects();
+      switchModule('project');
+    }
+
+    async function loadUsers() {
+      const res = await apiFetch('/api/users');
+      if (res.ok) {
+        allUsers = await res.json();
+        const userSelect = document.getElementById('rdFilterUser');
+        if (userSelect) {
+          userSelect.innerHTML = '<option value="ALL">ALL</option>';
+          allUsers.forEach(u => userSelect.innerHTML += `<option value="${u.email}">${u.fullName}</option>`);
+        }
+      }
+    }
+
+    async function loadProjects() {
+      const res = await apiFetch('/api/projects');
+      if (!res.ok) return;
+      projects = await res.json();
+
+      const select = document.getElementById('activeProjectSelect');
+      const rdProjSelect = document.getElementById('rdFilterProject');
+
+      select.innerHTML = '';
+      if (rdProjSelect) rdProjSelect.innerHTML = '<option value="ALL">ALL</option>';
+
+      if (projects.length === 0) {
+        select.innerHTML = '<option value="">-- Chưa có dự án được phân công --</option>';
+        currentProject = null;
+        return;
+      }
+
+      projects.forEach(p => {
+        select.innerHTML += `<option value="${p._id}">${p.code} - ${p.name} (Manager: ${p.managerEmail})</option>`;
+        if (rdProjSelect) rdProjSelect.innerHTML += `<option value="${p._id}">${p.code} - ${p.name}</option>`;
+      });
+
+      currentProject = projects[0];
+    }
+
+    function onProjectChange() {
+      const id = document.getElementById('activeProjectSelect').value;
+      currentProject = projects.find(p => p._id === id);
+      renderProjectModule();
+    }
+
+    function switchModule(moduleName) {
+      document.querySelectorAll('nav button').forEach(btn => btn.classList.remove('bg-slate-800', 'text-blue-400'));
+      document.getElementById('nav-' + moduleName).classList.add('bg-slate-800', 'text-blue-400');
+
+      document.querySelectorAll('.module-content').forEach(sec => sec.classList.add('hidden'));
+      document.getElementById('module-' + moduleName).classList.remove('hidden');
+
+      if (moduleName === 'project') renderProjectModule();
+      if (moduleName === 'report') renderReportModule();
+      if (moduleName === 'reportData') renderReportDataModule();
+      if (moduleName === 'summary') renderSummaryModule();
+    }
+
+    function getUserShortName(email) {
+      const u = allUsers.find(item => item.email === email);
+      if (u && u.fullName) return u.fullName;
+      return email ? email.split('@')[0] : 'N/A';
+    }
+
+    function toggleColumn(colClass) {
+      const chk = document.getElementById('chk-' + colClass);
+      const isChecked = chk ? chk.checked : true;
+
+      if (!isChecked) hiddenColumns.add(colClass);
+      else hiddenColumns.delete(colClass);
+
+      applyColumnVisibility();
+    }
+
+    function applyColumnVisibility() {
+      const allColClasses = ['col-id', 'col-status', 'col-predecessors', 'col-taskname', 'col-start', 'col-finish', 'col-duration', 'col-plan', 'col-approval', 'col-assign'];
+      
+      allColClasses.forEach(colClass => {
+        const elements = document.querySelectorAll('.' + colClass);
+        if (hiddenColumns.has(colClass)) {
+          elements.forEach(el => el.classList.add('hidden'));
+        } else {
+          elements.forEach(el => el.classList.remove('hidden'));
+        }
+      });
+    }
+
+    function filterColumnChooser(query) {
+      const q = query.toLowerCase().trim();
+      document.querySelectorAll('#columnChooserList .col-item').forEach(item => {
+        const text = item.innerText.toLowerCase();
+        if (text.includes(q)) item.classList.remove('hidden');
+        else item.classList.add('hidden');
+      });
+    }
+
+    function clearColumnSearch() {
+      document.getElementById('colSearchInput').value = '';
+      filterColumnChooser('');
+    }
+
+    function selectTaskRow(taskId) {
+      selectedTaskId = taskId;
+      document.querySelectorAll('#projectTableBody tr').forEach(tr => {
+        tr.className = tr.className.replace(/bg-red-100|border-l-4|border-red-600|text-red-900|font-medium/g, '').trim();
+      });
+      
+      const selectedTr = document.getElementById('task-row-' + taskId);
+      if (selectedTr) {
+        selectedTr.classList.add('bg-red-100', 'border-l-4', 'border-red-600', 'text-red-900', 'font-medium');
+      }
+    }
+
+    function unselectTask() {
+      selectedTaskId = null;
+      document.querySelectorAll('#projectTableBody tr').forEach(tr => {
+        tr.className = tr.className.replace(/bg-red-100|border-l-4|border-red-600|text-red-900|font-medium/g, '').trim();
+      });
+    }
+
+    async function promptBatchInsert() {
+      if (!currentProject) return;
+      const input = prompt("Nhập số lượng dòng muốn chèn cùng lúc (VD: 1, 3, 5):", "1");
+      if (!input) return;
+
+      const count = parseInt(input);
+      if (isNaN(count) || count < 1) {
+        alert("⚠️ Số lượng không hợp lệ!");
+        return;
+      }
+
+      const res = await apiFetch('/api/tasks/batch', {
+        method: 'POST',
+        body: JSON.stringify({
+          projectId: currentProject._id,
+          count,
+          assigneeEmail: currentUser.email,
+          insertAfterTaskId: selectedTaskId
+        })
+      });
+
+      if (res.ok) {
+        alert(`🎉 Đã chèn thành công ${count} dòng công việc mới!`);
+        renderProjectModule();
+      }
+    }
+
+    async function moveTask(direction) {
+      if (!selectedTaskId) {
+        alert("⚠️ Vui lòng click chọn 1 công việc trên bảng để di chuyển!");
+        return;
+      }
+
+      const res = await apiFetch(`/api/tasks/${selectedTaskId}/move`, {
+        method: 'PUT',
+        body: JSON.stringify({ direction })
+      });
+
+      if (res.ok) renderProjectModule();
+    }
+
+    async function indentTask(delta) {
+      if (!selectedTaskId) {
+        alert("⚠️ Vui lòng chọn 1 công việc trên bảng!");
+        return;
+      }
+
+      const row = document.getElementById('task-row-' + selectedTaskId);
+      let currentIndent = parseInt(row?.getAttribute('data-indent') || '0');
+      let newIndent = Math.max(0, Math.min(4, currentIndent + delta));
+
+      const res = await apiFetch(`/api/tasks/${selectedTaskId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ indentLevel: newIndent })
+      });
+
+      if (res.ok) renderProjectModule();
+    }
+
+    async function updateTaskCell(taskId, fieldName, fieldValue) {
+      const updatePayload = { [fieldName]: fieldValue };
+
+      if (fieldName === 'startDate' || fieldName === 'finishDate') {
+        const row = document.getElementById('task-row-' + taskId);
+        const startVal = fieldName === 'startDate' ? fieldValue : row.querySelector('.inp-start').value;
+        const finishVal = fieldName === 'finishDate' ? fieldValue : row.querySelector('.inp-finish').value;
+
+        if (startVal && finishVal) {
+          const d1 = new Date(startVal);
+          const d2 = new Date(finishVal);
+          const diffDays = Math.max(1, Math.round((d2 - d1) / (1000 * 60 * 60 * 24)));
+          updatePayload.duration = diffDays;
+        }
+      }
+
+      await apiFetch(`/api/tasks/${taskId}`, {
+        method: 'PUT',
+        body: JSON.stringify(updatePayload)
+      });
+
+      renderProjectModule();
+    }
+
+    async function deleteSelectedTask() {
+      if (!selectedTaskId) {
+        alert("⚠️ Vui lòng click chọn 1 công việc trước khi bấm Xóa!");
+        return;
+      }
+
+      if (!confirm("Bạn có chắc chắn muốn xóa công việc đã chọn?")) return;
+
+      const res = await apiFetch(`/api/tasks/${selectedTaskId}`, { method: 'DELETE' });
+      if (res.ok) {
+        selectedTaskId = null;
+        alert("🎉 Đã xóa công việc thành công!");
+        renderProjectModule();
+      }
+    }
+
+    function toggleWBSTree(taskId) {
+      if (collapsedTasks.has(taskId)) {
+        collapsedTasks.delete(taskId);
+      } else {
+        collapsedTasks.add(taskId);
+      }
+      renderProjectModule();
+    }
+
+    function expandAllWBS() {
+      collapsedTasks.clear();
+      renderProjectModule();
+    }
+
+    function collapseAllWBS() {
+      document.querySelectorAll('#projectTableBody tr[data-has-child="true"]').forEach(tr => {
+        const id = tr.id.replace('task-row-', '');
+        collapsedTasks.add(id);
+      });
+      renderProjectModule();
+    }
+
+    async function renderProjectModule() {
+      if (!currentProject) return;
+
+      const myTasksOnly = document.getElementById('myTasksOnlyToggle')?.checked;
+      const res = await apiFetch(`/api/tasks?projectId=${currentProject._id}`);
+      if (!res.ok) return;
+      let tasks = await res.json();
+
+      if (myTasksOnly) {
+        tasks = tasks.filter(t => t.assigneeEmail === currentUser.email);
+      }
+
+      const tbody = document.getElementById('projectTableBody');
+      tbody.innerHTML = '';
+
+      if (tasks.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="10" class="p-6 text-center text-slate-400 font-medium">Chưa có công việc nào trong dự án này. Bấm "+ Insert" để chèn dòng mới!</td></tr>`;
+        applyColumnVisibility();
+        return;
+      }
+
+      let hiddenParentIndent = null;
+
+      tasks.forEach((t, idx) => {
+        const indentLevel = t.indentLevel || 0;
+        const nextTask = tasks[idx + 1];
+        const hasChild = nextTask && (nextTask.indentLevel > indentLevel);
+        const isCollapsed = collapsedTasks.has(t._id);
+
+        if (hiddenParentIndent !== null) {
+          if (indentLevel > hiddenParentIndent) {
+            return;
+          } else {
+            hiddenParentIndent = null;
+          }
+        }
+
+        if (isCollapsed && hasChild) {
+          hiddenParentIndent = indentLevel;
+        }
+
+        const isSelected = selectedTaskId === t._id;
+        const indentPadding = indentLevel * 16;
+
+        let userOptions = allUsers.map(u => 
+          `<option value="${u.email}" ${u.email === t.assigneeEmail ? 'selected' : ''}>${u.fullName} (${u.email})</option>`
+        ).join('');
+
+        tbody.innerHTML += `
+          <tr id="task-row-${t._id}" 
+              data-indent="${indentLevel}" 
+              data-has-child="${hasChild}"
+              onclick="selectTaskRow('${t._id}')" 
+              class="border-b hover:bg-slate-50 transition divide-x divide-slate-100 text-slate-800 cursor-pointer ${isSelected ? 'bg-red-100 border-l-4 border-red-600 text-red-900 font-medium' : ''}">
+            
+            <td class="p-2 text-center font-semibold text-slate-500 bg-slate-50/50 col-id">${idx + 1}</td>
+            <td class="p-2 col-status">${renderStatusBadge(t.status)}</td>
+            <td class="p-2 text-center text-blue-600 font-bold col-predecessors">${idx > 0 ? idx : '-'}</td>
+            
+            <td class="p-1 font-semibold col-taskname" style="padding-left: ${8 + indentPadding}px;">
+              <div class="flex items-center space-x-1.5">
+                ${hasChild ? `
+                  <button onclick="event.stopPropagation(); toggleWBSTree('${t._id}')" class="w-4 h-4 border rounded bg-slate-200 text-slate-700 flex items-center justify-center text-[10px] font-extrabold hover:bg-slate-300">
+                    ${isCollapsed ? '+' : '-'}
+                  </button>
+                ` : `<span class="w-4 inline-block text-slate-300 text-center">•</span>`}
+                <input type="text" value="${t.title}" onchange="updateTaskCell('${t._id}', 'title', this.value)" class="w-full bg-transparent outline-none focus:bg-white border-b border-transparent focus:border-blue-500 font-semibold px-1 py-0.5 rounded">
+              </div>
+            </td>
+
+            <td class="p-1 col-start">
+              <input type="date" value="${t.startDate || ''}" onchange="updateTaskCell('${t._id}', 'startDate', this.value)" class="inp-start w-full border border-slate-200 rounded px-1 py-0.5 text-xs text-slate-700 bg-slate-50 focus:bg-white">
+            </td>
+            <td class="p-1 col-finish">
+              <input type="date" value="${t.finishDate || ''}" onchange="updateTaskCell('${t._id}', 'finishDate', this.value)" class="inp-finish w-full border border-slate-200 rounded px-1 py-0.5 text-xs text-slate-700 bg-slate-50 focus:bg-white">
+            </td>
+            <td class="p-2 text-center font-mono font-bold col-duration">${t.duration || 7}</td>
+
+            <td class="p-1 text-center col-plan">
+              <input type="number" value="${t.planQty || 100}" onchange="updateTaskCell('${t._id}', 'planQty', Number(this.value))" class="w-16 text-center font-mono border border-slate-200 rounded px-1 py-0.5 text-xs bg-slate-50 focus:bg-white">
+            </td>
+
+            <td class="p-2 text-center font-mono font-black text-emerald-700 col-approval">${t.approvedQty || 0}</td>
+
+            <td class="p-1 col-assign">
+              <select onchange="updateTaskCell('${t._id}', 'assigneeEmail', this.value)" title="${t.assigneeEmail}" class="w-full border border-blue-200 rounded px-1 py-0.5 text-xs font-semibold text-blue-900 bg-blue-50/50 outline-none">
+                ${userOptions}
+              </select>
+            </td>
+          </tr>
+        `;
+      });
+
+      applyColumnVisibility();
+    }
+
+    // ==========================================
+    // MODULE REPORT (ĐÃ KHÓA CỨNG CỘT WEEK)
+    // ==========================================
+
+    async function renderReportModule() {
+  if (!currentProject) return;
+
+  const todoBox = document.getElementById('report-todo-container');
+  const l1Tbody = document.getElementById('reportL1TableBody');
+  const l2Tbody = document.getElementById('reportL2TableBody');
+  const sentTbody = document.getElementById('reportSentTableBody');
+
+  const [tasksRes, reportsRes] = await Promise.all([
+    apiFetch(`/api/tasks?projectId=${currentProject._id}`),
+    apiFetch(`/api/report-data?projectId=${currentProject._id}`)
+  ]);
+
+  if (!tasksRes.ok || !reportsRes.ok) return;
+  const tasks = await tasksRes.json();
+  const reports = await reportsRes.json();
+
+  // 1. TO-DO / DRAFT
+  const myTasks = tasks.filter(t => t.assigneeEmail === currentUser.email && (t.status === 'To Do' || t.status === 'In Progress' || t.status === 'Rejected'));
+
+  if (myTasks.length === 0) {
+    todoBox.innerHTML = `<p class="text-slate-400 italic">Không có task nào cần báo cáo vào lúc này.</p>`;
+  } else {
+    let html = `<div class="grid grid-cols-1 md:grid-cols-2 gap-3">`;
+    myTasks.forEach(t => {
+      html += `
+        <div class="border bg-slate-50 p-3 rounded-lg space-y-2 shadow-sm">
+          <div class="flex justify-between items-start">
+            <span class="font-bold text-slate-800">${t.title}</span>
+            ${renderStatusBadge(t.status)}
+          </div>
+          <p class="text-xs text-slate-500"><strong>Dự án:</strong> ${currentProject.code} - ${currentProject.name}</p>
+          <button onclick="openReportModal('${t._id}')" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-1.5 rounded text-xs">
+            📝 Gửi Báo cáo Tiến độ (Tuần hiện tại)
+          </button>
+        </div>
+      `;
+    });
+    html += `</div>`;
+    todoBox.innerHTML = html;
+  }
+
+  // 2. PROJECT (DUYỆT L1)
+  l1Tbody.innerHTML = '';
+  const l1PendingReports = reports.filter(r => r.status === 'Submitted');
+
+  if (l1PendingReports.length === 0 || (currentUser.role !== 'Manager' && currentUser.role !== 'Admin')) {
+    l1Tbody.innerHTML = `<tr><td colspan="14" class="p-4 text-center text-blue-500 font-medium">Không có Reports nào trong mục này!</td></tr>`;
+  } else {
+    l1PendingReports.forEach((r, idx) => {
+      const task = r.taskId || {};
+      // Lấy chuẩn mã tuần đã chốt từ CSDL (VD: T41:2026)
+      const weekStr = r.week || getWeekString(new Date(r.createdAt));
+      const planVal = task.planQty || 100;
+
+      l1Tbody.innerHTML += `
+        <tr id="l1-row-${r._id}" class="border-b hover:bg-slate-50 transition divide-x divide-slate-100 text-slate-800">
+          <td class="p-2 text-center">
+            <div class="flex items-center justify-center space-x-1">
+              <button onclick="executeApproveL1('${r._id}', 'APPROVE')" title="Phê duyệt L1" class="p-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold">➢</button>
+              <button onclick="executeApproveL1('${r._id}', 'REJECT')" title="Từ chối" class="p-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-bold">✕</button>
+            </div>
+          </td>
+          <td class="p-2 text-slate-700 font-bold bg-slate-50 select-none">🔒 ${weekStr}</td>
+          <td class="p-2 font-bold text-blue-700">🔒 ${currentProject.code}</td>
+          <td class="p-2 font-semibold">🔒 ${getUserShortName(r.submittedByEmail)}</td>
+          <td class="p-2 font-medium">🔒 ${task.title || 'N/A'}</td>
+          <td class="p-2 text-slate-500">🔒 ${task.startDate || '-'}</td>
+          <td class="p-2 text-slate-500">🔒 ${task.finishDate || '-'}</td>
+          <td class="p-2 text-center font-mono">🔒 ${planVal}</td>
+          <td class="p-2 text-center font-mono text-slate-500 l1-remain-val">${Math.max(0, planVal - (r.work || planVal))}</td>
+          
+          <td class="p-1 text-center bg-blue-50">
+            <input type="number" value="${r.work || planVal}" class="l1-inp-work w-16 text-center font-mono font-bold border border-blue-400 rounded px-1 py-0.5 text-xs bg-white text-blue-900">
+          </td>
+
+          <td class="p-1 text-center">
+            <input type="number" value="${r.actual || planVal}" class="l1-inp-actual w-16 text-center font-mono border border-slate-300 rounded px-1 py-0.5 text-xs bg-white">
+          </td>
+
+          <td class="p-1 text-center">
+            <input type="number" value="${r.assess || 3}" min="1" max="5" class="l1-inp-assess w-14 text-center font-mono border border-slate-300 rounded px-1 py-0.5 text-xs bg-white">
+          </td>
+
+          <td class="p-1">
+            <input type="text" value="${r.note || ''}" placeholder="Ghi chú..." class="l1-inp-note w-full border border-slate-200 rounded px-1.5 py-0.5 text-xs">
+          </td>
+          <td class="p-2 text-center text-slate-400">-</td>
+        </tr>
+      `;
+    });
+  }
+
+  // 3. PROJECT GROUP (DUYỆT L2)
+  l2Tbody.innerHTML = '';
+  const l2PendingReports = reports.filter(r => r.status === 'L1 Approved');
+
+  if (l2PendingReports.length === 0 || currentUser.role !== 'Admin') {
+    l2Tbody.innerHTML = `<tr><td colspan="14" class="p-4 text-center text-blue-500 font-medium">Không có Reports nào trong mục này!</td></tr>`;
+  } else {
+    l2PendingReports.forEach((r, idx) => {
+      const task = r.taskId || {};
+      const weekStr = r.week || getWeekString(new Date(r.createdAt));
+      const planVal = task.planQty || 100;
+
+      l2Tbody.innerHTML += `
+        <tr id="l2-row-${r._id}" class="border-b hover:bg-slate-50 transition divide-x divide-slate-100 text-slate-800">
+          <td class="p-2 text-center">
+            <div class="flex items-center justify-center space-x-1">
+              <button onclick="executeApproveL2('${r._id}', 'APPROVE')" title="Phê duyệt L2 (Completed)" class="p-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-bold">➢</button>
+              <button onclick="executeApproveL2('${r._id}', 'REJECT')" title="Từ chối" class="p-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-bold">✕</button>
+            </div>
+          </td>
+          <td class="p-2 text-slate-700 font-bold bg-slate-50 select-none">🔒 ${weekStr}</td>
+          <td class="p-2 font-bold text-blue-700">🔒 ${currentProject.code}</td>
+          <td class="p-2 font-semibold">🔒 ${getUserShortName(r.submittedByEmail)}</td>
+          <td class="p-2 font-medium">🔒 ${task.title || 'N/A'}</td>
+          <td class="p-2 text-slate-500">🔒 ${task.startDate || '-'}</td>
+          <td class="p-2 text-slate-500">🔒 ${task.finishDate || '-'}</td>
+          <td class="p-2 text-center font-mono">🔒 ${planVal}</td>
+          <td class="p-2 text-center font-mono text-slate-500 l2-remain-val">${Math.max(0, planVal - (r.work || planVal))}</td>
+          
+          <td class="p-1 text-center bg-emerald-50">
+            <input type="number" value="${r.work || planVal}" class="l2-inp-work w-16 text-center font-mono font-bold border border-emerald-500 rounded px-1 py-0.5 text-xs bg-white text-emerald-900">
+          </td>
+
+          <td class="p-1 text-center">
+            <input type="number" value="${r.actual || planVal}" class="l2-inp-actual w-16 text-center font-mono border border-slate-300 rounded px-1 py-0.5 text-xs bg-white">
+          </td>
+
+          <td class="p-1 text-center">
+            <input type="number" value="${r.assess || 3}" min="1" max="5" class="l2-inp-assess w-14 text-center font-mono border border-slate-300 rounded px-1 py-0.5 text-xs bg-white">
+          </td>
+
+          <td class="p-1">
+            <input type="text" value="${r.note || ''}" placeholder="Ghi chú..." class="l2-inp-note w-full border border-slate-200 rounded px-1.5 py-0.5 text-xs">
+          </td>
+          <td class="p-2 text-center text-slate-400">-</td>
+        </tr>
+      `;
+    });
+  }
+
+  // 4. SENT
+  sentTbody.innerHTML = '';
+
+  if (reports.length === 0) {
+    sentTbody.innerHTML = `<tr><td colspan="15" class="p-4 text-center text-slate-400">Chưa có báo cáo nào được ghi nhận.</td></tr>`;
+    return;
+  }
+
+  reports.forEach((r, idx) => {
+    const task = r.taskId || {};
+    const weekStr = r.week || getWeekString(new Date(r.createdAt));
+
+    let reviewByHtml = `<div class="space-y-1 text-[11px]">`;
+    reviewByHtml += `<div class="text-slate-600">👤 ${getUserShortName(r.submittedByEmail)}</div>`;
+    if (r.reviewedByL1Email) {
+      reviewByHtml += `<div class="text-blue-600 font-semibold">✔ ${getUserShortName(r.reviewedByL1Email)} (L1)</div>`;
+    }
+    if (r.reviewedByL2Email) {
+      reviewByHtml += `<div class="text-emerald-600 font-extrabold">✔ ${getUserShortName(r.reviewedByL2Email)} (L2)</div>`;
+    }
+    reviewByHtml += `</div>`;
+
+    sentTbody.innerHTML += `
+      <tr class="border-b hover:bg-slate-50 transition divide-x divide-slate-100 text-slate-800">
+        <td class="p-2 text-center font-semibold text-slate-500 bg-slate-50/50">${idx + 1}</td>
+        <td class="p-2 text-slate-700 font-bold bg-slate-50">${weekStr}</td>
+        <td class="p-2 font-bold text-blue-700">${currentProject.code}</td>
+        <td class="p-2 font-semibold">${getUserShortName(r.submittedByEmail)}</td>
+        <td class="p-2 font-medium">${task.title || 'N/A'}</td>
+        <td class="p-2 text-slate-500">${task.startDate || '-'}</td>
+        <td class="p-2 text-slate-500">${task.finishDate || '-'}</td>
+        <td class="p-2 text-center font-mono">${task.planQty || 100}</td>
+        <td class="p-2 text-center font-mono text-slate-400">${r.remain || 0}</td>
+        <td class="p-2 text-center font-mono font-bold text-blue-700">${r.work || 0}</td>
+        <td class="p-2 text-center font-mono">${r.actual || 0}</td>
+        <td class="p-2 text-center font-mono">${r.assess || 3}</td>
+        <td class="p-2 text-slate-600">${r.note || '-'}</td>
+        <td class="p-2 text-center text-slate-400">-</td>
+        <td class="p-2 bg-slate-50/50">${reviewByHtml}</td>
+      </tr>
+    `;
+  });
+}
+
+      // 3. PROJECT GROUP (DUYỆT L2 GRID VỚI CỘT WEEK KHÓA T41:2026)
+      l2Tbody.innerHTML = '';
+      const l2PendingReports = reports.filter(r => r.status === 'L1 Approved');
+
+      if (l2PendingReports.length === 0 || currentUser.role !== 'Admin') {
+        l2Tbody.innerHTML = `<tr><td colspan="14" class="p-4 text-center text-blue-500 font-medium">Không có Reports nào trong mục này!</td></tr>`;
+      } else {
+        l2PendingReports.forEach((r, idx) => {
+          const task = r.taskId || {};
+          const weekStr = r.week || getWeekString(new Date(r.createdAt));
+          const planVal = task.planQty || 100;
+
+          l2Tbody.innerHTML += `
+            <tr id="l2-row-${r._id}" class="border-b hover:bg-slate-50 transition divide-x divide-slate-100 text-slate-800">
+              <td class="p-2 text-center">
+                <div class="flex items-center justify-center space-x-1">
+                  <button onclick="executeApproveL2('${r._id}', 'APPROVE')" title="Phê duyệt L2 (Completed)" class="p-1 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-bold">➢</button>
+                  <button onclick="executeApproveL2('${r._id}', 'REJECT')" title="Từ chối" class="p-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-bold">✕</button>
+                </div>
+              </td>
+              <td class="p-2 text-slate-700 font-bold bg-slate-50 select-none">🔒 ${weekStr}</td>
+              <td class="p-2 font-bold text-blue-700">🔒 ${currentProject.code}</td>
+              <td class="p-2 font-semibold">🔒 ${getUserShortName(r.submittedByEmail)}</td>
+              <td class="p-2 font-medium">🔒 ${task.title || 'N/A'}</td>
+              <td class="p-2 text-slate-500">🔒 ${task.startDate || '-'}</td>
+              <td class="p-2 text-slate-500">🔒 ${task.finishDate || '-'}</td>
+              <td class="p-2 text-center font-mono">🔒 ${planVal}</td>
+              <td class="p-2 text-center font-mono text-slate-500 l2-remain-val">${Math.max(0, planVal - (r.work || planVal))}</td>
+              
+              <td class="p-1 text-center bg-emerald-50">
+                <input type="number" value="${r.work || planVal}" class="l2-inp-work w-16 text-center font-mono font-bold border border-emerald-500 rounded px-1 py-0.5 text-xs bg-white text-emerald-900">
+              </td>
+
+              <td class="p-1 text-center">
+                <input type="number" value="${r.actual || planVal}" class="l2-inp-actual w-16 text-center font-mono border border-slate-300 rounded px-1 py-0.5 text-xs bg-white">
+              </td>
+
+              <td class="p-1 text-center">
+                <input type="number" value="${r.assess || 3}" min="1" max="5" class="l2-inp-assess w-14 text-center font-mono border border-slate-300 rounded px-1 py-0.5 text-xs bg-white">
+              </td>
+
+              <td class="p-1">
+                <input type="text" value="${r.note || ''}" placeholder="Ghi chú..." class="l2-inp-note w-full border border-slate-200 rounded px-1.5 py-0.5 text-xs">
+              </td>
+              <td class="p-2 text-center text-slate-400">-</td>
+            </tr>
+          `;
+        });
+      }
+
+      // 4. SENT (KHÓA CỨNG WEEK THỜI GIAN THỰC)
+      sentTbody.innerHTML = '';
+
+      if (reports.length === 0) {
+        sentTbody.innerHTML = `<tr><td colspan="15" class="p-4 text-center text-slate-400">Chưa có báo cáo nào được ghi nhận.</td></tr>`;
+        return;
+      }
+
+      reports.forEach((r, idx) => {
+        const task = r.taskId || {};
+        const weekStr = r.week || getWeekString(new Date(r.createdAt));
+
+        let reviewByHtml = `<div class="space-y-1 text-[11px]">`;
+        reviewByHtml += `<div class="text-slate-600">👤 ${getUserShortName(r.submittedByEmail)}</div>`;
+        if (r.reviewedByL1Email) {
+          reviewByHtml += `<div class="text-blue-600 font-semibold">✔ ${getUserShortName(r.reviewedByL1Email)} (L1)</div>`;
+        }
+        if (r.reviewedByL2Email) {
+          reviewByHtml += `<div class="text-emerald-600 font-extrabold">✔ ${getUserShortName(r.reviewedByL2Email)} (L2)</div>`;
+        }
+        reviewByHtml += `</div>`;
+
+        sentTbody.innerHTML += `
+          <tr class="border-b hover:bg-slate-50 transition divide-x divide-slate-100 text-slate-800">
+            <td class="p-2 text-center font-semibold text-slate-500 bg-slate-50/50">${idx + 1}</td>
+            <td class="p-2 text-slate-700 font-bold bg-slate-50">${weekStr}</td>
+            <td class="p-2 font-bold text-blue-700">${currentProject.code}</td>
+            <td class="p-2 font-semibold">${getUserShortName(r.submittedByEmail)}</td>
+            <td class="p-2 font-medium">${task.title || 'N/A'}</td>
+            <td class="p-2 text-slate-500">${task.startDate || '-'}</td>
+            <td class="p-2 text-slate-500">${task.finishDate || '-'}</td>
+            <td class="p-2 text-center font-mono">${task.planQty || 100}</td>
+            <td class="p-2 text-center font-mono text-slate-400">${r.remain || 0}</td>
+            <td class="p-2 text-center font-mono font-bold text-blue-700">${r.work || 0}</td>
+            <td class="p-2 text-center font-mono">${r.actual || 0}</td>
+            <td class="p-2 text-center font-mono">${r.assess || 3}</td>
+            <td class="p-2 text-slate-600">${r.note || '-'}</td>
+            <td class="p-2 text-center text-slate-400">-</td>
+            <td class="p-2 bg-slate-50/50">${reviewByHtml}</td>
+          </tr>
+        `;
+      });
+    }
+
+    async function executeApproveL1(reportId, action) {
+      const row = document.getElementById('l1-row-' + reportId);
+      const work = row ? row.querySelector('.l1-inp-work').value : undefined;
+      const actual = row ? row.querySelector('.l1-inp-actual').value : undefined;
+      const assess = row ? row.querySelector('.l1-inp-assess').value : undefined;
+      const note = row ? row.querySelector('.l1-inp-note').value : undefined;
+
+      const res = await apiFetch(`/api/report-data/${reportId}/approve-l1`, {
+        method: 'PUT',
+        body: JSON.stringify({ action, work, actual, assess, note })
+      });
+
+      if (res.ok) {
+        alert(action === 'APPROVE' ? "🎉 Đã duyệt L1 thành công!" : "❌ Đã từ chối báo cáo!");
+        renderReportModule();
+      }
+    }
+
+    async function executeApproveL2(reportId, action) {
+      const row = document.getElementById('l2-row-' + reportId);
+      const work = row ? row.querySelector('.l2-inp-work').value : undefined;
+      const actual = row ? row.querySelector('.l2-inp-actual').value : undefined;
+      const assess = row ? row.querySelector('.l2-inp-assess').value : undefined;
+      const note = row ? row.querySelector('.l2-inp-note').value : undefined;
+
+      const res = await apiFetch(`/api/report-data/${reportId}/approve-l2`, {
+        method: 'PUT',
+        body: JSON.stringify({ action, work, actual, assess, note })
+      });
+
+      if (res.ok) {
+        alert(action === 'APPROVE' ? "🎉 Đã duyệt L2 thành công! Chỉ số Work đã cập nhật thành con số Approval chính thức." : "❌ Đã từ chối báo cáo!");
+        renderReportModule();
+      }
+    }
+
+    // ==========================================
+    // MODULE REPORT DATA (KẾ THỪA TUẦN T41:2026)
+    // ==========================================
+
+    function toggleReportDataColMenu() {
+      document.getElementById('reportDataColMenu').classList.toggle('hidden');
+    }
+
+    function toggleRDCol(colClass) {
+      const chk = document.getElementById('rd-chk-' + colClass.replace('rd-col-', ''));
+      if (chk && !chk.checked) rdHiddenCols.add(colClass);
+      else rdHiddenCols.delete(colClass);
+
+      document.querySelectorAll('.' + colClass).forEach(el => {
+        if (rdHiddenCols.has(colClass)) el.classList.add('hidden');
+        else el.classList.remove('hidden');
+      });
+    }
+
+    async function renderReportDataModule() {
+      const pId = document.getElementById('rdFilterProject')?.value || 'ALL';
+      const uEmail = document.getElementById('rdFilterUser')?.value || 'ALL';
+
+      let url = '/api/report-data';
+      if (pId !== 'ALL') url += `?projectId=${pId}`;
+
+      const res = await apiFetch(url);
+      if (!res.ok) return;
+      let reports = await res.json();
+
+      if (uEmail !== 'ALL') {
+        reports = reports.filter(r => r.submittedByEmail === uEmail);
+      }
+
+      currentFetchedReports = reports;
+      const tbody = document.getElementById('reportDataGridTbody');
+      tbody.innerHTML = '';
+
+      if (reports.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="16" class="p-6 text-center text-slate-400 font-medium">Không có Reports nào trong mục này!</td></tr>';
+        return;
+      }
+
+      reports.forEach((r, idx) => {
+        const task = r.taskId || {};
+        const proj = projects.find(p => p._id === r.projectId) || {};
+        const weekStr = r.week || getWeekString(new Date(r.createdAt));
+
+        const projCodeStr = proj.code || (currentProject ? currentProject.code : 'PRJ-001');
+        const disciplineStr = (task.title && task.title.toLowerCase().includes('pccc')) ? 'PCCC' : 'MEP';
+        const taskFolderStr = task.title ? task.title : 'Hạng mục chi tiết';
+
+        const infoFolderHtml = `
+          <div class="flex items-center space-x-2 font-mono text-[11px] text-slate-700">
+            <span class="font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">${projCodeStr}</span>
+            <span class="text-slate-400">/</span>
+            <span class="bg-slate-100 px-1.5 py-0.5 rounded border">${disciplineStr}</span>
+            <span class="text-slate-400">/</span>
+            <span class="font-medium">${taskFolderStr}</span>
+          </div>
+        `;
+
+        let badgeState = '<span class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-[10px] font-bold">⏳ pending</span>';
+        if (r.status === 'Completed' || r.status === 'L1 Approved') {
+          badgeState = '<span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-extrabold border border-emerald-300">✔ approved</span>';
+        } else if (r.status === 'Rejected') {
+          badgeState = '<span class="bg-red-100 text-red-800 px-2 py-0.5 rounded text-[10px] font-bold">✕ rejected</span>';
+        }
+
+        tbody.innerHTML += `
+          <tr class="border-b hover:bg-slate-50 transition divide-x divide-slate-100">
+            <td class="p-2.5 text-center font-bold text-slate-500 rd-col-stt">${idx + 1}</td>
+            <td class="p-2.5 font-bold text-slate-800 rd-col-week">${weekStr}</td>
+            <td class="p-2.5 font-semibold text-slate-800 rd-col-owner">${getUserShortName(r.submittedByEmail)}</td>
+            <td class="p-2.5 font-bold text-blue-700 rd-col-proj">${projCodeStr}</td>
+            <td class="p-2.5 font-semibold text-slate-800 rd-col-name">${task.title || 'N/A'}</td>
+            <td class="p-2.5 text-slate-500 rd-col-note">${r.note || '-'}</td>
+            <td class="p-2.5 text-slate-600 rd-col-dates">${task.startDate || '-'}</td>
+            <td class="p-2.5 text-slate-600 rd-col-dates">${task.finishDate || '-'}</td>
+            <td class="p-2.5 text-center font-mono">${task.planQty || 100}</td>
+            <td class="p-2.5 text-center font-mono">${r.work || 0}</td>
+            <td class="p-2.5 text-center font-mono font-bold text-blue-600">${task.approvedQty || r.work || 0}</td>
+            <td class="p-2.5 text-center font-mono">${r.actual || 0}</td>
+            <td class="p-2.5 text-center font-mono font-bold">${r.assess || 3}</td>
+            <td class="p-2.5 text-center">${badgeState}</td>
+            <td class="p-2.5 text-center">
+              <button onclick="showReportDetail('${r._id}')" class="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded text-[10px] font-bold shadow-sm">Show</button>
+            </td>
+            <td class="p-2.5 bg-slate-50/50 rd-col-info">${infoFolderHtml}</td>
+          </tr>
+        `;
+      });
+
+      rdHiddenCols.forEach(colClass => {
+        document.querySelectorAll('.' + colClass).forEach(el => el.classList.add('hidden'));
+      });
+    }
+
+    function showReportDetail(reportId) {
+      const r = currentFetchedReports.find(item => item._id === reportId);
+      if (!r) return;
+      const task = r.taskId || {};
+
+      const detailHtml = `
+        <div class="space-y-2 text-slate-700">
+          <p><strong>Tuần báo cáo:</strong> <span class="bg-blue-50 text-blue-700 font-bold px-2 py-0.5 rounded border border-blue-200">${r.week || getWeekString(new Date(r.createdAt))}</span></p>
+          <p><strong>Dự án:</strong> ${currentProject ? currentProject.code : 'N/A'}</p>
+          <p><strong>Tên Task:</strong> ${task.title || 'N/A'}</p>
+          <p><strong>Người nộp báo cáo:</strong> ${getUserShortName(r.submittedByEmail)} (${r.submittedByEmail})</p>
+          <p><strong>Trạng thái hiện tại:</strong> ${r.status}</p>
+          <div class="bg-slate-50 p-2.5 rounded border my-2 space-y-1">
+            <p><strong>Nội dung Ghi chú:</strong> ${r.note || 'Không có ghi chú'}</p>
+            <p><strong>Work:</strong> ${r.work} | <strong>Actual:</strong> ${r.actual} | <strong>Assess:</strong> ${r.assess}</p>
+          </div>
+          <p><strong>Người duyệt L1:</strong> ${r.reviewedByL1Email ? getUserShortName(r.reviewedByL1Email) : 'Chưa duyệt'}</p>
+          <p><strong>Người duyệt L2:</strong> ${r.reviewedByL2Email ? getUserShortName(r.reviewedByL2Email) : 'Chưa duyệt'}</p>
+          <p class="text-[10px] text-slate-400 pt-1">Thời gian tạo: ${new Date(r.createdAt).toLocaleString()}</p>
+        </div>
+      `;
+
+      document.getElementById('reportDetailBody').innerHTML = detailHtml;
+      openModal('reportDetailModal');
+    }
+
+    // ==========================================
+    // MODULE SUMMARY PIVOT MATRIX (KẾ THỪA T41:2026)
+    // ==========================================
+
+    async function renderSummaryModule() {
+      const groupBy = document.querySelector('input[name="sumGroupRadio"]:checked')?.value || 'Project';
+      const showPlan = document.getElementById('chkSumPlan')?.checked;
+      const showApprove = document.getElementById('chkSumApprove')?.checked;
+
+      const selectedWeekNodes = Array.from(document.querySelectorAll('.chk-week-filter:checked')).map(cb => cb.value);
+      const activeWeeks = selectedWeekNodes.length > 0 ? selectedWeekNodes : ['T37:2026', 'T38:2026', 'T39:2026', 'T40:2026', 'T41:2026'];
+
+      const [tasksRes, reportsRes] = await Promise.all([
+        apiFetch('/api/tasks'),
+        apiFetch('/api/report-data')
+      ]);
+
+      if (!tasksRes.ok || !reportsRes.ok) return;
+      const tasks = await tasksRes.json();
+      const reports = await reportsRes.json();
+
+      const matrixMap = {};
+
+      tasks.forEach(t => {
+        let key = 'Dự án chung';
+        if (groupBy === 'Project') {
+          const proj = projects.find(p => p._id === t.projectId);
+          key = proj ? `${proj.code}_${proj.name}` : (currentProject ? `${currentProject.code}_${currentProject.name}` : 'Dự án mẫu');
+        } else {
+          key = getUserShortName(t.assigneeEmail);
+        }
+
+        const agreementType = (t.title && t.title.toLowerCase().includes('shop')) ? 'Shop' : 'BIM';
+
+        if (!matrixMap[key]) {
+          matrixMap[key] = {
+            rowName: key,
+            agreement: agreementType,
+            totalPlan: 0,
+            totalApproval: 0,
+            weeks: {}
+          };
+          activeWeeks.forEach(w => matrixMap[key].weeks[w] = { plan: 0, approval: 0 });
+        }
+
+        const planQty = t.planQty || 100;
+        const approvedQty = t.approvedQty || 0;
+
+        matrixMap[key].totalPlan += planQty;
+        matrixMap[key].totalApproval += approvedQty;
+
+        // Phân bổ chính xác theo mã tuần đã chốt
+        const currentRealWeek = getWeekString(new Date());
+        if (matrixMap[key].weeks[currentRealWeek]) {
+          matrixMap[key].weeks[currentRealWeek].plan += planQty;
+          matrixMap[key].weeks[currentRealWeek].approval += approvedQty;
+        }
+      });
+
+      const matrixRows = Object.values(matrixMap);
+
+      const thead = document.getElementById('summaryTableHead');
+      const tbody = document.getElementById('summaryTableBody');
+
+      let headHtml = `
+        <tr class="bg-[#5b9bd5] text-white font-bold text-[11px] divide-x divide-blue-300">
+          <th class="p-2.5 w-48">${groupBy} 🔻</th>
+          <th class="p-2.5 w-32">Agreement BIM/Shop 🔻</th>
+          <th class="p-2.5 w-36 text-center bg-emerald-600 font-black">SUMMARY</th>
+      `;
+      activeWeeks.forEach(w => {
+        headHtml += `<th class="p-2.5 w-28 text-center">${w} 🔻</th>`;
+      });
+      headHtml += `</tr>`;
+      thead.innerHTML = headHtml;
+
+      let grandPlan = 0;
+      let grandApproval = 0;
+      const weekGrandTotals = {};
+      activeWeeks.forEach(w => weekGrandTotals[w] = { plan: 0, approval: 0 });
+
+      matrixRows.forEach(r => {
+        grandPlan += r.totalPlan;
+        grandApproval += r.totalApproval;
+        activeWeeks.forEach(w => {
+          weekGrandTotals[w].plan += r.weeks[w]?.plan || 0;
+          weekGrandTotals[w].approval += r.weeks[w]?.approval || 0;
+        });
+      });
+
+      const formatVal = (p, a) => {
+        if (!showPlan && !showApprove) return '-';
+        if (showPlan && showApprove) return `${p} | ${a}`;
+        if (showPlan) return `${p}`;
+        return `${a}`;
+      };
+
+      let bodyHtml = `
+        <tr class="bg-emerald-300 font-extrabold text-slate-900 divide-x divide-emerald-400">
+          <td class="p-2.5 uppercase font-black">SUMMARY</td>
+          <td class="p-2.5">--</td>
+          <td class="p-2.5 text-center font-mono font-black text-sm bg-emerald-400">${formatVal(grandPlan, grandApproval)}</td>
+      `;
+      activeWeeks.forEach(w => {
+        bodyHtml += `<td class="p-2.5 text-center font-mono">${formatVal(weekGrandTotals[w].plan, weekGrandTotals[w].approval)}</td>`;
+      });
+      bodyHtml += `</tr>`;
+
+      if (matrixRows.length === 0) {
+        bodyHtml += `<tr><td colspan="${3 + activeWeeks.length}" class="p-4 text-center text-slate-400">Chưa có dữ liệu tổng hợp.</td></tr>`;
+      } else {
+        matrixRows.forEach(r => {
+          bodyHtml += `
+            <tr class="border-b hover:bg-slate-50 transition divide-x divide-slate-100">
+              <td class="p-2.5 font-bold text-slate-800">${r.rowName}</td>
+              <td class="p-2.5 font-semibold text-blue-700">${r.agreement}</td>
+              <td class="p-2.5 text-center font-mono font-bold bg-emerald-50 text-emerald-900">${formatVal(r.totalPlan, r.totalApproval)}</td>
+          `;
+          activeWeeks.forEach(w => {
+            const wData = r.weeks[w] || { plan: 0, approval: 0 };
+            const str = (wData.plan || wData.approval) ? formatVal(wData.plan, wData.approval) : '|';
+            bodyHtml += `<td class="p-2.5 text-center font-mono text-slate-600">${str}</td>`;
+          });
+          bodyHtml += `</tr>`;
+        });
+      }
+
+      tbody.innerHTML = bodyHtml;
+    }
+
+    // HANDLERS TẠO DỰ ÁN & TẠO USER TỪ FILE CHUẨN
+    function openCreateProjectModal() {
+      const select = document.getElementById('projManagerSelect');
+      select.innerHTML = '';
+      if (allUsers.length === 0) {
+        select.innerHTML = '<option value="">Chưa có User nào</option>';
+      } else {
+        allUsers.forEach(u => {
+          select.innerHTML += `<option value="${u.email}">${u.fullName} (${u.email}) - [${u.role}]</option>`;
+        });
+      }
+      openModal('projectModal');
+    }
+
+    async function handleCreateProject(e) {
+      e.preventDefault();
+      const name = document.getElementById('projName').value;
+      const code = document.getElementById('projCode').value;
+      const managerEmail = document.getElementById('projManagerSelect').value;
+
+      const res = await apiFetch('/api/projects', {
+        method: 'POST',
+        body: JSON.stringify({ name, code, managerEmail })
+      });
+
+      if (res.ok) {
+        alert("🎉 Khai báo dự án thành công!");
+        closeModal('projectModal');
+        document.getElementById('projName').value = '';
+        document.getElementById('projCode').value = '';
+        await loadProjects();
+        renderProjectModule();
+      }
+    }
+
+    function openCreateTaskModal() {
+      if (!currentProject) return;
+      const select = document.getElementById('taskAssigneeSelect');
+      select.innerHTML = '';
+      allUsers.forEach(u => {
+        select.innerHTML += `<option value="${u.email}">${u.fullName} (${u.email}) - [${u.role}]</option>`;
+      });
+      openModal('taskModal');
+    }
+
+    async function handleCreateTask(e) {
+      e.preventDefault();
+      const title = document.getElementById('taskTitle').value;
+      const assigneeEmail = document.getElementById('taskAssigneeSelect').value;
+
+      const res = await apiFetch('/api/tasks', {
+        method: 'POST',
+        body: JSON.stringify({ projectId: currentProject._id, title, assigneeEmail })
+      });
+
+      if (res.ok) {
+        alert("🎉 Tạo và gán Task thành công!");
+        closeModal('taskModal');
+        document.getElementById('taskTitle').value = '';
+        renderProjectModule();
+      }
+    }
+
+    async function handleCreateUser(e) {
+      e.preventDefault();
+      const fullName = document.getElementById('userFullName').value;
+      const email = document.getElementById('userEmail').value;
+      const role = document.getElementById('userRoleSelect').value;
+
+      const res = await apiFetch('/api/users', {
+        method: 'POST',
+        body: JSON.stringify({ fullName, email, password: "123456", role })
+      });
+
+      if (res.ok) {
+        alert(`🎉 Đã tạo thành công tài khoản: ${email} (Mật khẩu: 123456)`);
+        closeModal('userModal');
+        document.getElementById('userFullName').value = '';
+        document.getElementById('userEmail').value = '';
+        await loadUsers();
+      }
+    }
+
+    function openReportModal(taskId) {
+      document.getElementById('reportTaskId').value = taskId;
+      openModal('reportModal');
+    }
+
+    async function handleSubmitReport(e) {
+      e.preventDefault();
+      const taskId = document.getElementById('reportTaskId').value;
+      const note = document.getElementById('reportNote').value;
+      const work = document.getElementById('reportWorkInput').value;
+      const actual = document.getElementById('reportActualInput').value;
+      const assess = document.getElementById('reportAssessInput').value;
+
+      const res = await apiFetch('/api/report/submit', {
+        method: 'POST',
+        body: JSON.stringify({ taskId, note, work, actual, assess })
+      });
+
+      if (res.ok) {
+        alert('🎉 Đã gửi báo cáo thành công! Tuần báo cáo đã được chốt cố định.');
+        closeModal('reportModal');
+        document.getElementById('reportNote').value = '';
+        renderReportModule();
+      }
+    }
+
+    async function handleChangePassword(e) {
+      e.preventDefault();
+      const oldPassword = document.getElementById('oldPassInput').value;
+      const newPassword = document.getElementById('newPassInput').value;
+
+      const res = await apiFetch('/api/change-password', {
+        method: 'PUT',
+        body: JSON.stringify({ oldPassword, newPassword })
+      });
+
+      if (res.ok) {
+        alert("🎉 Đổi mật khẩu thành công!");
+        closeModal('changePassModal');
+        document.getElementById('oldPassInput').value = '';
+        document.getElementById('newPassInput').value = '';
+      }
+    }
+
+    function renderStatusBadge(status) {
+      if (status === 'Completed') return '<span class="px-2 py-1 rounded text-xs font-bold bg-green-100 text-green-800">✅ Completed</span>';
+      if (status === 'L1 Approved') return '<span class="px-2 py-1 rounded text-xs font-bold bg-blue-100 text-blue-800">🔵 L1 Approved</span>';
+      if (status === 'Submitted') return '<span class="px-2 py-1 rounded text-xs font-bold bg-amber-100 text-amber-800">⏳ Submitted</span>';
+      if (status === 'Rejected') return '<span class="px-2 py-1 rounded text-xs font-bold bg-red-100 text-red-800">❌ Rejected</span>';
+      return '<span class="px-2 py-1 rounded text-xs font-bold bg-slate-100 text-slate-700">📋 ' + status + '</span>';
+    }
+  </script>
+</body>
+</html>
