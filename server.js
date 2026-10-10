@@ -562,6 +562,52 @@ app.get('/api/summary-matrix', authenticateToken, async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 });
+// =======================================================
+// HÀM TÍNH TUẦN THỜI GIAN THỰC ĐỊNH DẠNG T41:2026 (ISO-8601)
+// =======================================================
+function getWeekString(d = new Date()) {
+  const date = new Date(d.getTime());
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
+  const week1 = new Date(date.getFullYear(), 0, 4);
+  const weekNum = 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+  return `T${weekNum}:${date.getFullYear()}`;
+}
+
+// =======================================================
+// 1. API GỬI BÁO CÁO TIẾN ĐỘ (TỰ ĐỘNG KHÓA CỨNG TUẦN THỜI GIAN THỰC)
+// =======================================================
+app.post('/api/report/submit', authenticateToken, async (req, res) => {
+  try {
+    const { taskId, note, work, actual, assess } = req.body;
+    
+    // Tự động chốt mã tuần thời gian thực (VD: T41:2026)
+    const currentWeekStr = getWeekString(new Date());
+
+    const task = await Task.findById(taskId);
+    if (!task) return res.status(404).json({ message: 'Task không tồn tại' });
+
+    const newReport = new ReportData({
+      taskId,
+      projectId: task.projectId,
+      submittedByEmail: req.user.email,
+      note,
+      work: Number(work),
+      actual: Number(actual),
+      assess: Number(assess),
+      week: currentWeekStr, // Lưu cố định giá trị tuần vào Database
+      status: 'Submitted'
+    });
+
+    await newReport.save();
+    task.status = 'Submitted';
+    await task.save();
+
+    res.json({ success: true, report: newReport });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Enterprise Server running on port ${PORT}`));
